@@ -13,12 +13,7 @@ function buildSummary(selectedValues, selectedOptionMap, label) {
     return `Select ${label.toLowerCase()}`;
   }
 
-  if (selectedValues.length === 1) {
-    return selectedOptionMap.get(selectedValues[0])?.label ?? selectedValues[0];
-  }
-
-  const firstLabel = selectedOptionMap.get(selectedValues[0])?.label ?? selectedValues[0];
-  return `${firstLabel} +${selectedValues.length - 1}`;
+  return `${selectedValues.length} selected`;
 }
 
 export default function SearchableCheckboxSelector({
@@ -30,6 +25,7 @@ export default function SearchableCheckboxSelector({
   onToggle,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState(buildFallbackOptions(fallbackOptions));
   const [isLoading, setIsLoading] = useState(false);
@@ -37,26 +33,40 @@ export default function SearchableCheckboxSelector({
   const rootRef = useRef(null);
   const selectorMode = field.selectorMode ?? "inline";
   const criteriaKey = JSON.stringify(criteria);
-  const shouldFetchOptions = selectorMode === "inline" || isOpen;
+  const normalizedQuery = query.trim().toLowerCase();
+  const hasQuery = normalizedQuery.length > 0;
+  const shouldShowInlineOptions = selectorMode === "inline" && (isFocused || hasQuery);
+  const shouldFetchOptions =
+    (selectorMode === "inline" && (isFocused || hasQuery)) ||
+    (selectorMode === "dropdown" && isOpen);
+  const normalizedFallbackOptions = buildFallbackOptions(fallbackOptions);
 
   useEffect(() => {
     setOptions(buildFallbackOptions(fallbackOptions));
   }, [fallbackOptions]);
 
   useEffect(() => {
-    if (selectorMode !== "dropdown" || !isOpen) {
+    const shouldWatchOutsideClicks =
+      (selectorMode === "dropdown" && isOpen) ||
+      (selectorMode === "inline" && (isFocused || hasQuery));
+
+    if (!shouldWatchOutsideClicks) {
       return undefined;
     }
 
     function handlePointerDown(event) {
       if (!rootRef.current?.contains(event.target)) {
         setIsOpen(false);
+        setIsFocused(false);
+        setQuery("");
       }
     }
 
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         setIsOpen(false);
+        setIsFocused(false);
+        setQuery("");
       }
     }
 
@@ -67,7 +77,7 @@ export default function SearchableCheckboxSelector({
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, selectorMode]);
+  }, [hasQuery, isFocused, isOpen, selectorMode]);
 
   useEffect(() => {
     if (!optionsEndpoint || !shouldFetchOptions) {
@@ -119,22 +129,30 @@ export default function SearchableCheckboxSelector({
   }, [criteriaKey, field.name, optionsEndpoint, query, shouldFetchOptions]);
 
   const optionMap = new Map();
-
-  for (const option of options) {
-    optionMap.set(option.value, option);
-  }
-
-  for (const option of buildFallbackOptions(fallbackOptions)) {
-    if (!optionMap.has(option.value)) {
-      optionMap.set(option.value, option);
+  const locallyFilteredFallbackOptions = normalizedFallbackOptions.filter((option) => {
+    if (!normalizedQuery) {
+      return true;
     }
+
+    return option.label.toLowerCase().includes(normalizedQuery);
+  });
+  const baseOptions =
+    shouldShowInlineOptions || selectorMode === "dropdown"
+      ? (optionsEndpoint ? options : locallyFilteredFallbackOptions)
+      : [];
+
+  for (const option of baseOptions) {
+    optionMap.set(option.value, option);
   }
 
   for (const selectedValue of selectedValues) {
     if (!optionMap.has(selectedValue)) {
+      const fallbackOption = normalizedFallbackOptions.find(
+        (option) => option.value === selectedValue,
+      );
       optionMap.set(selectedValue, {
         value: selectedValue,
-        label: selectedValue,
+        label: fallbackOption?.label ?? selectedValue,
       });
     }
   }
@@ -157,6 +175,11 @@ export default function SearchableCheckboxSelector({
         type="text"
         value={query}
         placeholder={`Type to search ${field.label.toLowerCase()}`}
+        onFocus={() => {
+          if (selectorMode === "inline") {
+            setIsFocused(true);
+          }
+        }}
         onChange={(event) => setQuery(event.target.value)}
       />
       <div className="filter-option-list" role="group" aria-label={field.label}>
@@ -173,7 +196,10 @@ export default function SearchableCheckboxSelector({
             <span>{option.label}</span>
           </label>
         ))}
-        {!isLoading && !mergedOptions.length ? (
+        {!hasQuery && !shouldShowInlineOptions && selectedValues.length ? (
+          <p className="filter-option-empty">Start typing to add more options.</p>
+        ) : null}
+        {(hasQuery || shouldShowInlineOptions) && !isLoading && !mergedOptions.length ? (
           <p className="filter-option-empty">No matching options.</p>
         ) : null}
       </div>
@@ -195,7 +221,17 @@ export default function SearchableCheckboxSelector({
               aria-expanded={isOpen}
               className="filter-selector-trigger"
               type="button"
-              onClick={() => setIsOpen((currentOpen) => !currentOpen)}
+              onClick={() => {
+                setIsOpen((currentOpen) => {
+                  const nextOpen = !currentOpen;
+
+                  if (!nextOpen) {
+                    setQuery("");
+                  }
+
+                  return nextOpen;
+                });
+              }}
             >
               <span>{buildSummary(selectedValues, optionMap, field.label)}</span>
               <span className="filter-selector-trigger-icon" aria-hidden="true">
@@ -205,6 +241,21 @@ export default function SearchableCheckboxSelector({
             {isOpen ? (
               <div className="filter-selector-popover">
                 {selectorContent}
+              </div>
+            ) : null}
+            {selectedValues.length ? (
+              <div className="filter-selected-list" aria-label={`Selected ${field.label.toLowerCase()}`}>
+                {selectedValues.map((selectedValue) => (
+                  <button
+                    className="filter-selected-pill"
+                    key={selectedValue}
+                    type="button"
+                    onClick={() => onToggle(field.name, selectedValue)}
+                  >
+                    <span>{optionMap.get(selectedValue)?.label ?? selectedValue}</span>
+                    <span aria-hidden="true">x</span>
+                  </button>
+                ))}
               </div>
             ) : null}
           </>

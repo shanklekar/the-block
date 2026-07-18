@@ -99,6 +99,9 @@ export function createDefaultFilters() {
     datetime: {
       auction_start: { min: "", max: "" },
     },
+    flags: {
+      buy_now_available: false,
+    },
   };
 }
 
@@ -200,6 +203,11 @@ export const FILTER_GROUPS = [
         inputMode: "numeric",
         step: 100,
         prefix: "$",
+      },
+      {
+        name: "buy_now_available",
+        label: "Buy Now Available",
+        type: "toggle",
       },
     ],
   },
@@ -374,6 +382,14 @@ export function buildSearchCriteria(filters) {
       field: "auction_start",
       operator: "lte",
       value: auctionStartMaximum,
+    });
+  }
+
+  if (filters.flags.buy_now_available) {
+    rules.push({
+      field: "buy_now_price",
+      operator: "gt",
+      value: 0,
     });
   }
 

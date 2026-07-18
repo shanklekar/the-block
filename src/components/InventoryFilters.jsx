@@ -10,6 +10,7 @@ function FilterField({
   filterMetadata,
   filters,
   onDateChange,
+  onFlagChange,
   onRangeChange,
   onTextChange,
   onToggleCategorical,
@@ -85,6 +86,19 @@ function FilterField({
     );
   }
 
+  if (field.type === "toggle") {
+    return (
+      <label className="filter-toggle-field">
+        <input
+          checked={Boolean(filters.flags[field.name])}
+          type="checkbox"
+          onChange={(event) => onFlagChange(field.name, event.target.checked)}
+        />
+        <span>{field.label}</span>
+      </label>
+    );
+  }
+
   return (
     <fieldset className="filter-fieldset">
       <legend className="filter-label">{field.label}</legend>
@@ -131,6 +145,7 @@ export default function InventoryFilters({
   onClearFilters,
   onClose,
   onDateChange,
+  onFlagChange,
   onRangeChange,
   onTextChange,
   onToggleCategorical,
@@ -174,6 +189,7 @@ export default function InventoryFilters({
                     filters={filters}
                     key={field.name}
                     onDateChange={onDateChange}
+                    onFlagChange={onFlagChange}
                     onRangeChange={onRangeChange}
                     onTextChange={onTextChange}
                     onToggleCategorical={onToggleCategorical}

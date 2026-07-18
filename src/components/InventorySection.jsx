@@ -44,12 +44,14 @@ function countActiveFilters(filters) {
     (total, range) => total + (range.min !== "" ? 1 : 0) + (range.max !== "" ? 1 : 0),
     0,
   );
+  const activeFlags = Object.values(filters.flags).filter(Boolean).length;
 
   return (
     activeTextFilters +
     activeCategoricalFilters +
     activeRangeFilters +
-    activeDateFilters
+    activeDateFilters +
+    activeFlags
   );
 }
 
@@ -143,6 +145,7 @@ export default function InventorySection({
           ...filterSchema.fields.text,
           ...filterSchema.fields.numeric,
           ...filterSchema.fields.datetime,
+          "buy_now_available",
         ]
       : [],
   );
@@ -538,6 +541,16 @@ export default function InventorySection({
     setFilters(createDefaultFilters());
   }
 
+  function updateFlagFilter(field, value) {
+    setFilters((currentFilters) => ({
+      ...currentFilters,
+      flags: {
+        ...currentFilters.flags,
+        [field]: value,
+      },
+    }));
+  }
+
   return (
     <InventoryResults
       apiBaseUrl={apiBaseUrl}
@@ -559,6 +572,7 @@ export default function InventorySection({
           onClearFilters={clearFilters}
           onClose={() => setFiltersOpen(false)}
           onDateChange={updateDateFilter}
+          onFlagChange={updateFlagFilter}
           onRangeChange={updateRangeFilter}
           onTextChange={updateTextFilter}
           onToggleCategorical={toggleCategoricalFilter}
