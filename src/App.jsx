@@ -3,6 +3,7 @@ import { formatCurrency } from "./inventoryConfig";
 import BuyNowConfirmationModal from "./components/BuyNowConfirmationModal";
 import InventorySection from "./components/InventorySection";
 import OpenlaneLogo from "./components/OpenlaneLogo";
+import PurchasedVehiclesSection from "./components/PurchasedVehiclesSection";
 import VehicleDetailsModal from "./components/VehicleDetailsModal";
 import VehicleImageLightbox from "./components/VehicleImageLightbox";
 
@@ -13,6 +14,7 @@ const PURCHASE_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}
 const WATCH_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching`;
 
 export default function App() {
+  const [activeView, setActiveView] = useState("search");
   const [filterSchema, setFilterSchema] = useState(null);
   const [filterMetadata, setFilterMetadata] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -400,6 +402,24 @@ export default function App() {
         <div className="inventory-brand-lockup" aria-label="OPENLANE">
           <OpenlaneLogo />
         </div>
+        <nav className="inventory-view-nav" aria-label="Primary">
+          <button
+            aria-pressed={activeView === "search"}
+            className={`inventory-view-tab ${activeView === "search" ? "is-active" : ""}`}
+            type="button"
+            onClick={() => setActiveView("search")}
+          >
+            Search and Buy
+          </button>
+          <button
+            aria-pressed={activeView === "purchased"}
+            className={`inventory-view-tab ${activeView === "purchased" ? "is-active" : ""}`}
+            type="button"
+            onClick={() => setActiveView("purchased")}
+          >
+            Purchased Vehicles
+          </button>
+        </nav>
         <p className="inventory-hero-copy">
           <strong>Wholesale made easy</strong>
         </p>
@@ -419,67 +439,79 @@ export default function App() {
           </div>
         ) : null}
 
-        <InventorySection
-          apiBaseUrl={API_BASE_URL}
-          bootstrapErrorMessage={bootstrapErrorMessage}
-          currentUserId={CURRENT_USER_ID}
-          emptyStateMessage="No watched vehicles match your criteria."
-          enableWatchToggle
-          filterMetadata={filterMetadata}
-          filterPanelId="watchlist-filters-panel"
-          filterSchema={filterSchema}
-          filtersPanelLabel="Watchlist filters"
-          filtersTitle="Refine watchlist"
-          hiddenVehicleIds={soldVehicleIds}
-          isBootstrapping={isBootstrapping}
-          keepPurchasedLast
-          onBidPlaced={handleBidPlaced}
-          onRequestBuyNow={handleRequestBuyNow}
-          onWatchStateChanged={handleWatchStateChanged}
-          onSelectVehicle={openVehicleDetails}
-          panelLabel="Watchlist"
-          purchasedVehicleIds={purchasedVehicleIds}
-          refreshToken={inventoryRefreshToken}
-          searchEndpoint={`${API_BASE_URL}/api/users/1/watching/vehicles/search`}
-          showInlineBidding
-          watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
-          sectionTitle={(totalVehicles) =>
-            totalVehicles > 0
-              ? `${totalVehicles.toLocaleString()} watched vehicles ready to review`
-              : "Your watchlist"
-          }
-          sortLabel="Sort by"
-        />
+        {activeView === "search" ? (
+          <>
+            <InventorySection
+              apiBaseUrl={API_BASE_URL}
+              bootstrapErrorMessage={bootstrapErrorMessage}
+              currentUserId={CURRENT_USER_ID}
+              emptyStateMessage="No watched vehicles match your criteria."
+              enableWatchToggle
+              filterMetadata={filterMetadata}
+              filterPanelId="watchlist-filters-panel"
+              filterSchema={filterSchema}
+              filtersPanelLabel="Watchlist filters"
+              filtersTitle="Refine watchlist"
+              hiddenVehicleIds={soldVehicleIds}
+              isBootstrapping={isBootstrapping}
+              keepPurchasedLast
+              onBidPlaced={handleBidPlaced}
+              onRequestBuyNow={handleRequestBuyNow}
+              onWatchStateChanged={handleWatchStateChanged}
+              onSelectVehicle={openVehicleDetails}
+              panelLabel="Watchlist"
+              purchasedVehicleIds={purchasedVehicleIds}
+              refreshToken={inventoryRefreshToken}
+              searchEndpoint={`${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching/vehicles/search`}
+              showInlineBidding
+              watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
+              sectionTitle={(totalVehicles) =>
+                totalVehicles > 0
+                  ? `${totalVehicles.toLocaleString()} watched vehicles ready to review`
+                  : "Your watchlist"
+              }
+              sortLabel="Sort by"
+            />
 
-        <InventorySection
-          apiBaseUrl={API_BASE_URL}
-          bootstrapErrorMessage={bootstrapErrorMessage}
-          currentUserId={CURRENT_USER_ID}
-          emptyStateMessage="No vehicles match your criteria."
-          enableWatchToggle
-          filterMetadata={filterMetadata}
-          filterPanelId="inventory-filters-panel"
-          filterSchema={filterSchema}
-          filtersPanelLabel="Search filters"
-          filtersTitle="Refine inventory"
-          hiddenVehicleIds={soldVehicleIds}
-          isBootstrapping={isBootstrapping}
-          onBidPlaced={handleBidPlaced}
-          onRequestBuyNow={handleRequestBuyNow}
-          onWatchStateChanged={handleWatchStateChanged}
-          onSelectVehicle={openVehicleDetails}
-          panelLabel="Live search results"
-          purchasedVehicleIds={purchasedVehicleIds}
-          refreshToken={inventoryRefreshToken}
-          searchEndpoint={`${API_BASE_URL}/api/vehicles/search`}
-          watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
-          sectionTitle={(totalVehicles) =>
-            totalVehicles > 0
-              ? `${totalVehicles.toLocaleString()} vehicles ready to review`
-              : "Inventory results"
-          }
-          sortLabel="Sort by"
-        />
+            <InventorySection
+              apiBaseUrl={API_BASE_URL}
+              bootstrapErrorMessage={bootstrapErrorMessage}
+              currentUserId={CURRENT_USER_ID}
+              emptyStateMessage="No vehicles match your criteria."
+              enableWatchToggle
+              filterMetadata={filterMetadata}
+              filterPanelId="inventory-filters-panel"
+              filterSchema={filterSchema}
+              filtersPanelLabel="Search filters"
+              filtersTitle="Refine inventory"
+              hidePurchasedVehicles
+              hiddenVehicleIds={soldVehicleIds}
+              isBootstrapping={isBootstrapping}
+              onBidPlaced={handleBidPlaced}
+              onRequestBuyNow={handleRequestBuyNow}
+              onWatchStateChanged={handleWatchStateChanged}
+              onSelectVehicle={openVehicleDetails}
+              panelLabel="Live search results"
+              purchasedVehicleIds={purchasedVehicleIds}
+              refreshToken={inventoryRefreshToken}
+              searchEndpoint={`${API_BASE_URL}/api/vehicles/search`}
+              watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
+              sectionTitle={(totalVehicles) =>
+                totalVehicles > 0
+                  ? `${totalVehicles.toLocaleString()} vehicles ready to review`
+                  : "Inventory results"
+              }
+              sortLabel="Sort by"
+            />
+          </>
+        ) : (
+          <PurchasedVehiclesSection
+            apiBaseUrl={API_BASE_URL}
+            currentUserId={CURRENT_USER_ID}
+            refreshToken={inventoryRefreshToken}
+            onSelectVehicle={openVehicleDetails}
+          />
+        )}
       </section>
 
       {selectedVehicleId ? (

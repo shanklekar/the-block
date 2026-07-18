@@ -29,6 +29,10 @@ from .schemas import (
     FilterRule,
     DatetimeMetadata,
     NumericMetadata,
+    PurchasedVehicleSearchRequest,
+    PurchasedVehicleSearchResponse,
+    PurchasedVehicleSearchResult,
+    PurchasedVehicleSortField,
     PurchaseMutationRequest,
     PurchaseMutationResponse,
     SortDirection,
@@ -157,6 +161,29 @@ SORT_SQL_FIELDS = {
     SortField.CURRENT_PRICE: "COALESCE(current_bid, starting_bid)",
 }
 
+PURCHASED_SORT_SQL_FIELDS = {
+    PurchasedVehicleSortField.PURCHASE_DATE: "purchased.purchase_date",
+    PurchasedVehicleSortField.PURCHASE_AMOUNT: "purchased.purchase_amount",
+}
+
+PURCHASED_SEARCH_COLUMNS = [
+    "CAST(vehicles.year AS TEXT)",
+    "vehicles.make",
+    "vehicles.model",
+    "vehicles.trim",
+    "vehicles.body_style",
+    "vehicles.engine",
+    "vehicles.exterior_color",
+    "vehicles.interior_color",
+    "vehicles.drivetrain",
+    "vehicles.fuel_type",
+    "vehicles.city",
+    "vehicles.province",
+    "vehicles.selling_dealership",
+    "vehicles.lot",
+    "vehicles.condition_report",
+]
+
 
 def _shift_datetime_filter_value(value: Any, offset: timedelta) -> Any:
     if isinstance(value, str):
@@ -271,6 +298,22 @@ def build_order_clause(
     return f"ORDER BY {', '.join(order_fields)}"
 
 
+def build_purchased_order_clause(
+    sort_by: PurchasedVehicleSortField,
+    sort_direction: SortDirection,
+) -> str:
+    sort_expression = PURCHASED_SORT_SQL_FIELDS[sort_by]
+    direction = "ASC" if sort_direction == SortDirection.ASC else "DESC"
+    order_fields = [
+        f"{sort_expression} {direction}",
+        "vehicles.year DESC",
+        "vehicles.make ASC",
+        "vehicles.model ASC",
+        "vehicles.id ASC",
+    ]
+    return f"ORDER BY {', '.join(order_fields)}"
+
+
 def _combine_where_clauses(*clauses: tuple[str, list[Any]]) -> tuple[str, list[Any]]:
     conditions: list[str] = []
     parameters: list[Any] = []
@@ -290,6 +333,28 @@ def _combine_where_clauses(*clauses: tuple[str, list[Any]]) -> tuple[str, list[A
         return "", []
 
     return f"WHERE {' AND '.join(conditions)}", parameters
+
+
+def _build_purchased_search_clause(search: str) -> tuple[str, list[Any]]:
+    normalized_search = search.strip()
+
+    if not normalized_search:
+        return "", []
+
+    search_pattern = f"%{normalized_search.lower()}%"
+    detail_surface = " || ' ' || ".join(
+        f"COALESCE({column}, '')" for column in PURCHASED_SEARCH_COLUMNS
+    )
+
+    return (
+        f"""
+        (
+            LOWER(COALESCE(vehicles.vin, '')) LIKE ?
+            OR LOWER(TRIM({detail_surface})) LIKE ?
+        )
+        """,
+        [search_pattern, search_pattern],
+    )
 
 
 def _user_exists(connection: sqlite3.Connection, user_id: int) -> bool:
@@ -496,6 +561,19 @@ def _build_is_high_bidder_select(user_id: int | None) -> tuple[str, list[Any]]:
     )
 
 
+def _build_exclude_purchased_clause() -> tuple[str, list[Any]]:
+    return (
+        """
+        NOT EXISTS (
+            SELECT 1
+            FROM purchased
+            WHERE purchased.vehicle_id = vehicles.id
+        )
+        """,
+        [],
+    )
+
+
 def _ensure_vehicle_is_watched(
     connection: sqlite3.Connection,
     *,
@@ -601,6 +679,64 @@ def _build_vehicle_search_response(
         vehicles.append(VehicleSearchResult(**vehicle_data))
 
     return VehicleSearchResponse(
+        count=len(vehicles),
+        limit=payload.limit,
+        offset=payload.offset,
+        total=total_row["total"] if total_row is not None else 0,
+        vehicles=vehicles,
+    )
+
+
+def _build_purchased_vehicle_search_response(
+    payload: PurchasedVehicleSearchRequest,
+    *,
+    user_id: int,
+) -> PurchasedVehicleSearchResponse:
+    with get_connection() as connection:
+        if not _user_exists(connection, user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        auction_start_offset = get_auction_start_offset(connection)
+        where_clause, parameters = _combine_where_clauses(
+            ("purchased.user_id = ?", [user_id]),
+            _build_purchased_search_clause(payload.search),
+        )
+        order_clause = build_purchased_order_clause(
+            payload.sort_by,
+            payload.sort_direction,
+        )
+        query = f"""
+            SELECT
+                vehicles.*,
+                purchased.purchase_date,
+                purchased.purchase_amount
+            FROM purchased
+            INNER JOIN vehicles
+                ON vehicles.id = purchased.vehicle_id
+            {where_clause}
+            {order_clause}
+            LIMIT ?
+            OFFSET ?
+        """
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM purchased
+            INNER JOIN vehicles
+                ON vehicles.id = purchased.vehicle_id
+            {where_clause}
+        """
+        total_row = connection.execute(count_query, parameters).fetchone()
+        rows = connection.execute(
+            query,
+            [*parameters, payload.limit, payload.offset],
+        ).fetchall()
+
+    vehicles: list[PurchasedVehicleSearchResult] = []
+    for row in rows:
+        vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
+        vehicles.append(PurchasedVehicleSearchResult(**vehicle_data))
+
+    return PurchasedVehicleSearchResponse(
         count=len(vehicles),
         limit=payload.limit,
         offset=payload.offset,
@@ -772,7 +908,10 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
 
 @app.post("/api/vehicles/search", response_model=VehicleSearchResponse)
 def search_vehicles(payload: VehicleSearchRequest) -> VehicleSearchResponse:
-    return _build_vehicle_search_response(payload)
+    return _build_vehicle_search_response(
+        payload,
+        extra_clause=_build_exclude_purchased_clause(),
+    )
 
 
 @app.post(
@@ -804,6 +943,17 @@ def search_watched_vehicles(
         ),
         group_purchased_last=True,
     )
+
+
+@app.post(
+    "/api/users/{user_id}/purchased/vehicles/search",
+    response_model=PurchasedVehicleSearchResponse,
+)
+def search_purchased_vehicles(
+    payload: PurchasedVehicleSearchRequest,
+    user_id: int = Path(..., ge=0),
+) -> PurchasedVehicleSearchResponse:
+    return _build_purchased_vehicle_search_response(payload, user_id=user_id)
 
 
 @app.post(

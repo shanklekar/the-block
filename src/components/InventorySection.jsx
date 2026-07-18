@@ -89,6 +89,7 @@ export default function InventorySection({
   filterPanelId,
   filtersPanelLabel,
   filtersTitle,
+  hidePurchasedVehicles = false,
   isBootstrapping,
   keepPurchasedLast = false,
   onBidPlaced,
@@ -150,7 +151,13 @@ export default function InventorySection({
   const purchasedVehicleIdsKey = JSON.stringify(Object.keys(purchasedVehicleIds).sort());
 
   function prepareVehiclesForDisplay(nextVehicles) {
-    const visibleVehicles = filterHiddenVehicles(nextVehicles, hiddenVehicleIds);
+    let visibleVehicles = filterHiddenVehicles(nextVehicles, hiddenVehicleIds);
+
+    if (hidePurchasedVehicles) {
+      visibleVehicles = visibleVehicles.filter(
+        (vehicle) => !shouldTreatVehicleAsPurchased(vehicle, purchasedVehicleIds),
+      );
+    }
 
     if (!keepPurchasedLast) {
       return visibleVehicles;
@@ -185,11 +192,13 @@ export default function InventorySection({
 
   useEffect(() => {
     if (!keepPurchasedLast) {
-      return;
+      if (!hidePurchasedVehicles) {
+        return;
+      }
     }
 
     setVehicles((currentVehicles) => prepareVehiclesForDisplay(currentVehicles));
-  }, [keepPurchasedLast, purchasedVehicleIdsKey]);
+  }, [hidePurchasedVehicles, keepPurchasedLast, purchasedVehicleIdsKey]);
 
   function buildSearchPayload({ criteria, limit, offset, sortDirection, sortBy }) {
     return {

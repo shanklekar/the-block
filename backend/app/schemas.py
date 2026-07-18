@@ -41,6 +41,11 @@ class SortDirection(str, Enum):
     DESC = "desc"
 
 
+class PurchasedVehicleSortField(str, Enum):
+    PURCHASE_DATE = "purchase_date"
+    PURCHASE_AMOUNT = "purchase_amount"
+
+
 TEXT_FIELDS = {
     "id",
     "vin",
@@ -316,6 +321,31 @@ class VehicleSearchResponse(BaseModel):
     offset: int
     total: int
     vehicles: list[VehicleSearchResult]
+
+
+class PurchasedVehicleSearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    limit: int = Field(default=100, ge=1, le=250)
+    offset: int = Field(default=0, ge=0)
+    search: str = Field(default="", max_length=200)
+    sort_by: PurchasedVehicleSortField = PurchasedVehicleSortField.PURCHASE_DATE
+    sort_direction: SortDirection = SortDirection.DESC
+
+
+class PurchasedVehicleSearchResult(VehicleResponse):
+    purchase_amount: float
+    purchase_date: str
+
+
+class PurchasedVehicleSearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    count: int
+    limit: int
+    offset: int
+    total: int
+    vehicles: list[PurchasedVehicleSearchResult]
 
 
 class WatchingMutationRequest(BaseModel):

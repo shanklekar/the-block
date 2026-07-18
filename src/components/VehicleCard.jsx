@@ -58,6 +58,9 @@ export default function VehicleCard({
     .filter(Boolean)
     .join(" ");
   const vehicleGrade = formatConditionGrade(displayVehicle.condition_grade);
+  const vehicleLocation = [displayVehicle.city ?? "Unknown", displayVehicle.province ?? "N/A"]
+    .filter(Boolean)
+    .join(", ");
   const isWatched = Boolean(displayVehicle.is_watched);
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
@@ -150,21 +153,23 @@ export default function VehicleCard({
       <div className="vehicle-card-body">
         <div className="vehicle-card-heading">
           <h3>{vehicleTitle}</h3>
-          <p className="vehicle-card-subtitle">{formatMilesFromKm(vehicle.odometer_km)}</p>
+          <p className="vehicle-card-subtitle">
+            <span>{formatMilesFromKm(displayVehicle.odometer_km)}</span>
+            <span className="vehicle-card-subtitle-separator" aria-hidden="true">
+              •
+            </span>
+            <span>{vehicleLocation}</span>
+          </p>
         </div>
 
-        <dl className="vehicle-card-specs">
-          <div>
-            <dt>Location</dt>
-            <dd>
-              {displayVehicle.city ?? "Unknown"}, {displayVehicle.province ?? "N/A"}
-            </dd>
-          </div>
-          <div>
-            <dt>Auction</dt>
-            <dd>{formatAuctionDate(displayVehicle.auction_start)}</dd>
-          </div>
-        </dl>
+        {!showBidPanel ? (
+          <dl className="vehicle-card-specs">
+            <div className="vehicle-card-spec-row">
+              <dt>Auction start</dt>
+              <dd>{formatAuctionDate(displayVehicle.auction_start)}</dd>
+            </div>
+          </dl>
+        ) : null}
 
         {showBuyNowButton || showBidPanel ? (
           <div className="vehicle-card-footer">

@@ -169,7 +169,7 @@ export default function VehicleBidPanel({
       <div className="vehicle-bid-panel-header">
         <p className="inventory-panel-label">Live bidding</p>
         <div className="vehicle-bid-panel-auction-block">
-          <span className="vehicle-bid-panel-auction-label">Auction Start Time</span>
+          <span className="vehicle-bid-panel-auction-label">Auction Start Time:</span>
           <span className="vehicle-bid-panel-auction">{auctionStartTime}</span>
         </div>
       </div>
@@ -177,11 +177,12 @@ export default function VehicleBidPanel({
       <div className="vehicle-bid-panel-summary">
         <div className="vehicle-bid-panel-summary-card vehicle-bid-panel-summary-card-primary">
           <span>{summaryBidLabel}</span>
-          <strong>{formatCurrency(displayBid)}</strong>
-        </div>
-        <div className="vehicle-bid-panel-summary-card">
-          <span>Bid count</span>
-          <strong>{bidCount.toLocaleString()}</strong>
+          <strong>
+            {formatCurrency(displayBid)}{" "}
+            <span className="vehicle-bid-panel-bid-count">
+              ({bidCount.toLocaleString()} bids)
+            </span>
+          </strong>
         </div>
       </div>
 

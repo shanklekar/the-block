@@ -408,6 +408,20 @@ export function formatAuctionDate(value) {
   }).format(new Date(value));
 }
 
+export function formatPurchaseDate(value) {
+  if (!value) {
+    return "Date unavailable";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export function formatRangeHint(field, metadata) {
   if (!metadata) {
     return "";

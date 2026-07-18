@@ -58,6 +58,8 @@ export default function WatchToggleButton({
   label = "",
   onToggle,
 }) {
+  const buttonText = isWatched ? "Unwatch" : "Watch";
+
   return (
     <button
       aria-label={label}
@@ -68,6 +70,7 @@ export default function WatchToggleButton({
       onClick={onToggle}
     >
       {isWatched ? <EyeClosedIcon /> : <EyeOpenIcon />}
+      <span className="vehicle-watch-toggle-label">{buttonText}</span>
     </button>
   );
 }
