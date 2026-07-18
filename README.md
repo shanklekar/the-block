@@ -144,3 +144,66 @@ Here's what a single vehicle looks like:
 ```
 
 The data is synthetic but meant to feel realistic. Use it however you want. Should you need reasonable accommodation, please reach out to careers@openlane.com
+
+## Local backend
+
+This repo now includes a FastAPI backend that reads from [`data/vehicles.sqlite`](data/vehicles.sqlite).
+
+### Start the API
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --reload
+```
+
+The API will start on `http://127.0.0.1:8000`.
+
+### Available endpoints
+
+- `GET /health`
+- `GET /api/vehicles/filters/schema`
+- `POST /api/vehicles/search`
+- `GET /api/vehicles/{vehicle_id}`
+
+### Search request format
+
+`POST /api/vehicles/search` accepts a strict JSON payload with a maximum result count and a standardized filter format:
+
+```json
+{
+  "limit": 20,
+  "criteria": {
+    "match": "and",
+    "rules": [
+      {
+        "field": "make",
+        "operator": "in",
+        "value": ["Ford", "Honda"]
+      },
+      {
+        "field": "year",
+        "operator": "between",
+        "value": {
+          "min": 2020,
+          "max": 2025
+        }
+      },
+      {
+        "field": "auction_start",
+        "operator": "gte",
+        "value": "2026-04-01T00:00:00"
+      }
+    ]
+  }
+}
+```
+
+The backend does not trust incoming requests:
+
+- Only known fields can be filtered.
+- Only allowed operators can be used for each field type.
+- Request bodies reject unexpected properties.
+- All SQL values are bound as query parameters, not interpolated into SQL.
+- Result counts are capped to prevent oversized queries.
