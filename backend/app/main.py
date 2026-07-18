@@ -930,16 +930,19 @@ def search_watched_vehicles(
 
     return _build_vehicle_search_response(
         payload.model_copy(update={"user_id": user_id}),
-        extra_clause=(
-            """
-            EXISTS (
-                SELECT 1
-                FROM watching
-                WHERE watching.user_id = ?
-                  AND watching.vehicle_id = vehicles.id
-            )
-            """,
-            [user_id],
+        extra_clause=_combine_where_clauses(
+            (
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM watching
+                    WHERE watching.user_id = ?
+                      AND watching.vehicle_id = vehicles.id
+                )
+                """,
+                [user_id],
+            ),
+            _build_exclude_purchased_clause(),
         ),
         group_purchased_last=True,
     )
