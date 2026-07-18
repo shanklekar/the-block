@@ -27,7 +27,7 @@ export default function App() {
   const [vehicleDetailsWatchErrorMessage, setVehicleDetailsWatchErrorMessage] = useState("");
   const [vehicleDetailsPurchaseMessage, setVehicleDetailsPurchaseMessage] = useState("");
   const [isVehicleDetailsWatchPending, setIsVehicleDetailsWatchPending] = useState(false);
-  const [selectedImageUrl, setSelectedImageUrl] = useState("");
+  const [lightboxState, setLightboxState] = useState(null);
   const [buyNowVehicle, setBuyNowVehicle] = useState(null);
   const [isBuyNowPending, setIsBuyNowPending] = useState(false);
   const [purchaseFeedbackMessage, setPurchaseFeedbackMessage] = useState("");
@@ -142,17 +142,54 @@ export default function App() {
   }, [selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle) {
+    if (!selectedVehicleId && !lightboxState && !buyNowVehicle) {
       return undefined;
     }
 
     function handleEscape(event) {
-      if (event.key !== "Escape") {
-        return;
+      if (lightboxState) {
+        if (event.key === "Escape") {
+          setLightboxState(null);
+          return;
+        }
+
+        if (event.key === "ArrowLeft") {
+          setLightboxState((currentLightboxState) => {
+            if (!currentLightboxState || currentLightboxState.images.length <= 1) {
+              return currentLightboxState;
+            }
+
+            const previousIndex =
+              (currentLightboxState.activeIndex - 1 + currentLightboxState.images.length) %
+              currentLightboxState.images.length;
+
+            return {
+              ...currentLightboxState,
+              activeIndex: previousIndex,
+            };
+          });
+          return;
+        }
+
+        if (event.key === "ArrowRight") {
+          setLightboxState((currentLightboxState) => {
+            if (!currentLightboxState || currentLightboxState.images.length <= 1) {
+              return currentLightboxState;
+            }
+
+            const nextIndex =
+              (currentLightboxState.activeIndex + 1) % currentLightboxState.images.length;
+
+            return {
+              ...currentLightboxState,
+              activeIndex: nextIndex,
+            };
+          });
+          return;
+        }
       }
 
-      if (selectedImageUrl) {
-        setSelectedImageUrl("");
+      if (event.key !== "Escape") {
         return;
       }
 
@@ -171,10 +208,10 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
+  }, [buyNowVehicle, lightboxState, selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle) {
+    if (!selectedVehicleId && !lightboxState && !buyNowVehicle) {
       return undefined;
     }
 
@@ -184,18 +221,66 @@ export default function App() {
     return () => {
       document.body.style.overflow = overflow;
     };
-  }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
+  }, [buyNowVehicle, lightboxState, selectedVehicleId]);
+
+  function openImageLightbox(images, activeIndex, vehicleTitle) {
+    if (!Array.isArray(images) || !images.length) {
+      return;
+    }
+
+    const safeIndex = Number.isInteger(activeIndex)
+      ? Math.min(Math.max(activeIndex, 0), images.length - 1)
+      : 0;
+
+    setLightboxState({
+      activeIndex: safeIndex,
+      images,
+      vehicleTitle,
+    });
+  }
+
+  function closeImageLightbox() {
+    setLightboxState(null);
+  }
+
+  function showPreviousLightboxImage() {
+    setLightboxState((currentLightboxState) => {
+      if (!currentLightboxState || currentLightboxState.images.length <= 1) {
+        return currentLightboxState;
+      }
+
+      return {
+        ...currentLightboxState,
+        activeIndex:
+          (currentLightboxState.activeIndex - 1 + currentLightboxState.images.length) %
+          currentLightboxState.images.length,
+      };
+    });
+  }
+
+  function showNextLightboxImage() {
+    setLightboxState((currentLightboxState) => {
+      if (!currentLightboxState || currentLightboxState.images.length <= 1) {
+        return currentLightboxState;
+      }
+
+      return {
+        ...currentLightboxState,
+        activeIndex: (currentLightboxState.activeIndex + 1) % currentLightboxState.images.length,
+      };
+    });
+  }
 
   function openVehicleDetails(vehicleId) {
     console.log("[VehicleDetailsModal] Open vehicle:", vehicleId);
-    setSelectedImageUrl("");
+    setLightboxState(null);
     setVehicleDetailsPurchaseMessage("");
     setSelectedVehicleId(vehicleId);
   }
 
   function closeVehicleDetails() {
     vehicleDetailsRequestRef.current?.abort();
-    setSelectedImageUrl("");
+    setLightboxState(null);
     setSelectedVehicleId("");
     setSelectedVehicle(null);
     setIsVehicleDetailsLoading(false);
@@ -449,6 +534,7 @@ export default function App() {
               emptyStateMessage="No watched vehicles match your criteria."
               enableWatchToggle
               filterMetadata={filterMetadata}
+              filterOptionsEndpoint={`${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching/vehicles/filters/options`}
               filterPanelId="watchlist-filters-panel"
               filterSchema={filterSchema}
               filtersPanelLabel="Watchlist filters"
@@ -481,6 +567,7 @@ export default function App() {
               emptyStateMessage="No vehicles match your criteria."
               enableWatchToggle
               filterMetadata={filterMetadata}
+              filterOptionsEndpoint={`${API_BASE_URL}/api/vehicles/filters/options`}
               filterPanelId="inventory-filters-panel"
               filterSchema={filterSchema}
               filtersPanelLabel="Search filters"
@@ -531,7 +618,15 @@ export default function App() {
           onBidPlaced={handleBidPlaced}
           onBuyNow={handleRequestBuyNow}
           onClose={closeVehicleDetails}
-          onOpenImage={setSelectedImageUrl}
+          onOpenImage={(images, activeIndex) =>
+            openImageLightbox(
+              images,
+              activeIndex,
+              selectedVehicle
+                ? `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}`
+                : "Vehicle image",
+            )
+          }
           onToggleWatch={handleVehicleDetailsWatchToggle}
           vehicle={selectedVehicle}
           watchErrorMessage={vehicleDetailsWatchErrorMessage}
@@ -547,15 +642,14 @@ export default function App() {
         />
       ) : null}
 
-      {selectedImageUrl ? (
+      {lightboxState?.images?.length ? (
         <VehicleImageLightbox
-          imageUrl={selectedImageUrl}
-          onClose={() => setSelectedImageUrl("")}
-          vehicleTitle={
-            selectedVehicle
-              ? `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}`
-              : "Vehicle image"
-          }
+          activeIndex={lightboxState.activeIndex}
+          images={lightboxState.images}
+          onClose={closeImageLightbox}
+          onNext={showNextLightboxImage}
+          onPrevious={showPreviousLightboxImage}
+          vehicleTitle={lightboxState.vehicleTitle}
         />
       ) : null}
     </main>

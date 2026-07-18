@@ -85,6 +85,7 @@ export default function InventorySection({
   currentUserId = null,
   enableWatchToggle = false,
   filterMetadata,
+  filterOptionsEndpoint,
   filterSchema,
   filterPanelId,
   filtersPanelLabel,
@@ -549,6 +550,7 @@ export default function InventorySection({
       filtersPanel={
         <InventoryFilters
           allowedFields={allowedFields}
+          criteria={criteria}
           filterGroups={FILTER_GROUPS}
           filterMetadata={filterMetadata}
           filters={filters}
@@ -560,9 +562,8 @@ export default function InventorySection({
           onRangeChange={updateRangeFilter}
           onTextChange={updateTextFilter}
           onToggleCategorical={toggleCategoricalFilter}
+          optionsEndpoint={filterOptionsEndpoint}
           panelId={filterPanelId}
-          panelLabel={filtersPanelLabel}
-          title={filtersTitle}
         />
       }
       hasMore={hasMore}

@@ -224,7 +224,7 @@ export default function VehicleDetailsModal({
                   <button
                     className="vehicle-detail-hero-image-button"
                     type="button"
-                    onClick={() => onOpenImage(leadImageUrl)}
+                    onClick={() => onOpenImage(displayVehicle.images, 0)}
                   >
                     <img
                       alt={vehicleTitle}
@@ -397,7 +397,7 @@ export default function VehicleDetailsModal({
                       className="vehicle-detail-gallery-button"
                       key={`${imageUrl}-${index}`}
                       type="button"
-                      onClick={() => onOpenImage(imageUrl)}
+                      onClick={() => onOpenImage(displayVehicle.images, index)}
                     >
                       <img
                         alt={`${vehicleTitle} photo ${index + 1}`}

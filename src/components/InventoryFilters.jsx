@@ -1,17 +1,23 @@
-import { formatRangeHint } from "../inventoryConfig";
+import {
+  formatAuctionScheduleSpan,
+  formatRangeHint,
+} from "../inventoryConfig";
+import SearchableCheckboxSelector from "./SearchableCheckboxSelector";
 
 function FilterField({
+  criteria,
   field,
-  filters,
   filterMetadata,
+  filters,
+  onDateChange,
+  onRangeChange,
   onTextChange,
   onToggleCategorical,
-  onRangeChange,
-  onDateChange,
+  optionsEndpoint,
 }) {
   if (field.type === "text") {
     return (
-      <label className="filter-field" key={field.name}>
+      <label className="filter-field">
         <span className="filter-label">{field.label}</span>
         <input
           className="filter-input"
@@ -24,26 +30,16 @@ function FilterField({
     );
   }
 
-  if (field.type === "checkboxes") {
-    const options = filterMetadata?.categorical?.[field.name] ?? [];
-    const selectedOptions = filters.categorical[field.name];
-
+  if (field.type === "searchable-checkboxes") {
     return (
-      <fieldset className="filter-fieldset" key={field.name}>
-        <legend className="filter-label">{field.label}</legend>
-        <div className="filter-chip-grid">
-          {options.map((option) => (
-            <label className="filter-chip" key={option}>
-              <input
-                checked={selectedOptions.includes(option)}
-                onChange={() => onToggleCategorical(field.name, option)}
-                type="checkbox"
-              />
-              <span>{option}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <SearchableCheckboxSelector
+        criteria={criteria}
+        fallbackOptions={filterMetadata?.categorical?.[field.name] ?? []}
+        field={field}
+        optionsEndpoint={optionsEndpoint}
+        selectedValues={filters.categorical[field.name] ?? []}
+        onToggle={onToggleCategorical}
+      />
     );
   }
 
@@ -52,22 +48,20 @@ function FilterField({
     const values = filters.range[field.name];
 
     return (
-      <fieldset className="filter-fieldset" key={field.name}>
+      <fieldset className="filter-fieldset">
         <legend className="filter-label">{field.label}</legend>
-        <div className="filter-range-row">
+        <div className="filter-range-stack">
           <label className="filter-field">
             <span className="filter-sublabel">Min</span>
             <div className="filter-input-wrap">
               {field.prefix ? <span className="filter-prefix">{field.prefix}</span> : null}
               <input
-                className="filter-input"
+                className="filter-input filter-input-number"
                 inputMode={field.inputMode}
                 step={field.step}
                 type="number"
                 value={values.min}
-                onChange={(event) =>
-                  onRangeChange(field.name, "min", event.target.value)
-                }
+                onChange={(event) => onRangeChange(field.name, "min", event.target.value)}
               />
             </div>
           </label>
@@ -76,14 +70,12 @@ function FilterField({
             <div className="filter-input-wrap">
               {field.prefix ? <span className="filter-prefix">{field.prefix}</span> : null}
               <input
-                className="filter-input"
+                className="filter-input filter-input-number"
                 inputMode={field.inputMode}
                 step={field.step}
                 type="number"
                 value={values.max}
-                onChange={(event) =>
-                  onRangeChange(field.name, "max", event.target.value)
-                }
+                onChange={(event) => onRangeChange(field.name, "max", event.target.value)}
               />
             </div>
           </label>
@@ -94,9 +86,9 @@ function FilterField({
   }
 
   return (
-    <fieldset className="filter-fieldset" key={field.name}>
+    <fieldset className="filter-fieldset">
       <legend className="filter-label">{field.label}</legend>
-      <div className="filter-range-row">
+      <div className="filter-range-stack">
         <label className="filter-field">
           <span className="filter-sublabel">From</span>
           <input
@@ -119,8 +111,9 @@ function FilterField({
       {filterMetadata?.datetime?.auction_start?.min &&
       filterMetadata?.datetime?.auction_start?.max ? (
         <p className="filter-hint">
-          Inventory schedule spans {filterMetadata.datetime.auction_start.min} to{" "}
-          {filterMetadata.datetime.auction_start.max}
+          Inventory schedule spans{" "}
+          {formatAuctionScheduleSpan(filterMetadata.datetime.auction_start.min)} to{" "}
+          {formatAuctionScheduleSpan(filterMetadata.datetime.auction_start.max)}
         </p>
       ) : null}
     </fieldset>
@@ -129,6 +122,7 @@ function FilterField({
 
 export default function InventoryFilters({
   allowedFields,
+  criteria,
   filterGroups,
   filterMetadata,
   filters,
@@ -140,9 +134,8 @@ export default function InventoryFilters({
   onRangeChange,
   onTextChange,
   onToggleCategorical,
+  optionsEndpoint,
   panelId,
-  panelLabel = "Search filters",
-  title = "Refine inventory",
 }) {
   if (!isOpen) {
     return null;
@@ -150,23 +143,12 @@ export default function InventoryFilters({
 
   return (
     <section className="inventory-filters" id={panelId}>
-      <div className="inventory-filters-header">
-        <div>
-          <p className="inventory-panel-label">{panelLabel}</p>
-          <h2>{title}</h2>
-        </div>
-        <button className="inventory-close-button" type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
-
       <div className="inventory-filter-actions">
-        <p className="inventory-filter-copy">
-          Narrow the lane with the exact vehicle, location, pricing, and
-          condition signals you care about.
-        </p>
         <button className="inventory-clear-button" type="button" onClick={onClearFilters}>
           Clear all filters
+        </button>
+        <button className="inventory-close-button" type="button" onClick={onClose}>
+          Close
         </button>
       </div>
 
@@ -175,9 +157,7 @@ export default function InventoryFilters({
       ) : (
         <div className="inventory-filter-groups">
           {filterGroups.map((group) => {
-            const visibleFields = group.fields.filter((field) =>
-              allowedFields.has(field.name),
-            );
+            const visibleFields = group.fields.filter((field) => allowedFields.has(field.name));
 
             if (!visibleFields.length) {
               return null;
@@ -188,6 +168,7 @@ export default function InventoryFilters({
                 <h3>{group.title}</h3>
                 {visibleFields.map((field) => (
                   <FilterField
+                    criteria={criteria}
                     field={field}
                     filterMetadata={filterMetadata}
                     filters={filters}
@@ -196,6 +177,7 @@ export default function InventoryFilters({
                     onRangeChange={onRangeChange}
                     onTextChange={onTextChange}
                     onToggleCategorical={onToggleCategorical}
+                    optionsEndpoint={optionsEndpoint}
                   />
                 ))}
               </section>

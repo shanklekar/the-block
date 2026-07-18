@@ -71,6 +71,7 @@ NUMERIC_FIELDS = {
     "year",
     "odometer_km",
     "condition_grade",
+    "bid_amount",
     "starting_bid",
     "buy_now_price",
     "current_bid",
@@ -428,3 +429,52 @@ class VehicleFilterMetadataResponse(BaseModel):
     categorical: dict[str, list[str]]
     numeric: dict[str, NumericMetadata]
     datetime: dict[str, DatetimeMetadata]
+
+
+FILTER_OPTION_FIELDS = {
+    "make",
+    "model",
+    "trim",
+    "body_style",
+    "exterior_color",
+    "interior_color",
+    "engine",
+    "transmission",
+    "drivetrain",
+    "fuel_type",
+    "title_status",
+    "province",
+    "city",
+    "selling_dealership",
+}
+
+
+class FilterOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
+    label: str
+
+
+class VehicleFilterOptionsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    query: str = Field(default="", max_length=100)
+    criteria: FilterCriteria = Field(default_factory=FilterCriteria)
+    limit: int = Field(default=50, ge=1, le=100)
+    user_id: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_field(self) -> "VehicleFilterOptionsRequest":
+        if self.field not in FILTER_OPTION_FIELDS:
+            raise ValueError(f"Unsupported option field: {self.field}")
+
+        return self
+
+
+class VehicleFilterOptionsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    options: list[FilterOption]

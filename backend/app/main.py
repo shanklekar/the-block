@@ -24,6 +24,7 @@ from .schemas import (
     BidPlacementRequest,
     BidPlacementResponse,
     BiddingStateResponse,
+    FilterOption,
     FilterCriteria,
     FilterOperator,
     FilterRule,
@@ -40,6 +41,8 @@ from .schemas import (
     VehicleDetailResponse,
     VehicleResponse,
     VehicleFilterMetadataResponse,
+    VehicleFilterOptionsRequest,
+    VehicleFilterOptionsResponse,
     VehicleSearchResult,
     VehicleSearchRequest,
     VehicleSearchResponse,
@@ -153,6 +156,10 @@ OPERATOR_SQL = {
     FilterOperator.GTE: ">= ?",
 }
 
+COMPUTED_SQL_FIELDS = {
+    "bid_amount": "COALESCE({prefix}current_bid, {prefix}starting_bid)",
+}
+
 SORT_SQL_FIELDS = {
     SortField.AUCTION_START: "auction_start",
     SortField.ODOMETER_KM: "odometer_km",
@@ -206,6 +213,14 @@ def _shift_datetime_filter_value(value: Any, offset: timedelta) -> Any:
     return value
 
 
+def _get_sql_field_expression(field: str, *, prefix: str = "") -> str:
+    expression = COMPUTED_SQL_FIELDS.get(field)
+    if expression is not None:
+        return expression.format(prefix=prefix)
+
+    return f"{prefix}{field}"
+
+
 def _translate_criteria_to_stored_timeline(
     criteria: FilterCriteria,
     auction_start_offset: timedelta,
@@ -225,7 +240,7 @@ def _translate_criteria_to_stored_timeline(
 
 
 def _build_rule_clause(rule: FilterRule) -> tuple[str, list[Any]]:
-    column = rule.field
+    column = _get_sql_field_expression(rule.field)
 
     if rule.operator == FilterOperator.IS_NULL:
         return f"{column} IS NULL", []
@@ -255,6 +270,24 @@ def _build_rule_clause(rule: FilterRule) -> tuple[str, list[Any]]:
     raise ValueError(f"Unsupported operator: {rule.operator}")
 
 
+def _remove_field_rules(criteria: FilterCriteria, field: str) -> FilterCriteria:
+    if not criteria.rules:
+        return criteria
+
+    return FilterCriteria(
+        match=criteria.match,
+        rules=[rule for rule in criteria.rules if rule.field != field],
+    )
+
+
+def _format_filter_option_label(field: str, value: str) -> str:
+    normalized_value = value.strip()
+    if field in {"body_style", "exterior_color", "interior_color"}:
+        return normalized_value[:1].upper() + normalized_value[1:]
+
+    return normalized_value
+
+
 def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
     if not criteria.rules:
         return "", []
@@ -269,6 +302,16 @@ def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
 
     joiner = " AND " if criteria.match.value == "and" else " OR "
     return f"WHERE {joiner.join(clauses)}", parameters
+
+
+def _build_option_search_clause(field: str, query: str) -> tuple[str, list[Any]]:
+    normalized_query = query.strip()
+
+    if not normalized_query:
+        return "", []
+
+    column = _get_sql_field_expression(field)
+    return f"AND LOWER({column}) LIKE LOWER(?)", [f"%{normalized_query}%"]
 
 
 def build_order_clause(
@@ -333,6 +376,55 @@ def _combine_where_clauses(*clauses: tuple[str, list[Any]]) -> tuple[str, list[A
         return "", []
 
     return f"WHERE {' AND '.join(conditions)}", parameters
+
+
+def _search_filter_options(
+    payload: VehicleFilterOptionsRequest,
+    *,
+    extra_clause: tuple[str, list[Any]] | None = None,
+) -> VehicleFilterOptionsResponse:
+    with get_connection() as connection:
+        if payload.user_id is not None and not _user_exists(connection, payload.user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        criteria_without_target = _remove_field_rules(payload.criteria, payload.field)
+        translated_criteria = _translate_criteria_to_stored_timeline(
+            criteria_without_target,
+            get_auction_start_offset(connection),
+        )
+        criteria_clause = build_where_clause(translated_criteria)
+        where_clause, parameters = _combine_where_clauses(extra_clause or ("", []), criteria_clause)
+        option_column = _get_sql_field_expression(payload.field)
+        option_search_clause, option_search_parameters = _build_option_search_clause(
+            payload.field,
+            payload.query,
+        )
+        base_where_clause = where_clause or "WHERE 1 = 1"
+        query = f"""
+            SELECT DISTINCT {option_column} AS value
+            FROM vehicles
+            {base_where_clause}
+              AND {option_column} IS NOT NULL
+              AND TRIM(CAST({option_column} AS TEXT)) != ''
+              {option_search_clause}
+            ORDER BY value ASC
+            LIMIT ?
+        """
+        rows = connection.execute(
+            query,
+            [*parameters, *option_search_parameters, payload.limit],
+        ).fetchall()
+
+    return VehicleFilterOptionsResponse(
+        field=payload.field,
+        options=[
+            FilterOption(
+                value=str(row["value"]),
+                label=_format_filter_option_label(payload.field, str(row["value"])),
+            )
+            for row in rows
+        ],
+    )
 
 
 def _build_purchased_search_clause(search: str) -> tuple[str, list[Any]]:
@@ -885,8 +977,9 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
             categorical[field] = [str(row[0]) for row in rows]
 
         for field in FILTER_METADATA_FIELDS["numeric"]:
+            numeric_expression = _get_sql_field_expression(field)
             row = connection.execute(
-                f"SELECT MIN({field}) AS minimum, MAX({field}) AS maximum FROM vehicles"
+                f"SELECT MIN({numeric_expression}) AS minimum, MAX({numeric_expression}) AS maximum FROM vehicles"
             ).fetchone()
             numeric[field] = NumericMetadata(min=row["minimum"], max=row["maximum"])
 
@@ -903,6 +996,46 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
         categorical=categorical,
         numeric=numeric,
         datetime=datetime,
+    )
+
+
+@app.post(
+    "/api/vehicles/filters/options",
+    response_model=VehicleFilterOptionsResponse,
+)
+def search_filter_options(
+    payload: VehicleFilterOptionsRequest,
+) -> VehicleFilterOptionsResponse:
+    return _search_filter_options(payload)
+
+
+@app.post(
+    "/api/users/{user_id}/watching/vehicles/filters/options",
+    response_model=VehicleFilterOptionsResponse,
+)
+def search_watched_filter_options(
+    payload: VehicleFilterOptionsRequest,
+    user_id: int = Path(..., ge=0),
+) -> VehicleFilterOptionsResponse:
+    with get_connection() as connection:
+        user_exists = _user_exists(connection, user_id)
+
+    if not user_exists:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return _search_filter_options(
+        payload.model_copy(update={"user_id": user_id}),
+        extra_clause=(
+            """
+            EXISTS (
+                SELECT 1
+                FROM watching
+                WHERE watching.user_id = ?
+                  AND watching.vehicle_id = vehicles.id
+            )
+            """,
+            [user_id],
+        ),
     )
 
 

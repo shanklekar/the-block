@@ -71,31 +71,30 @@ export function createDefaultFilters() {
   return {
     text: {
       vin: "",
-      model: "",
-      trim: "",
-      engine: "",
-      city: "",
-      selling_dealership: "",
     },
     categorical: {
       make: [],
+      model: [],
+      trim: [],
       body_style: [],
       exterior_color: [],
       interior_color: [],
+      engine: [],
       transmission: [],
       drivetrain: [],
       fuel_type: [],
       title_status: [],
       province: [],
+      city: [],
+      selling_dealership: [],
     },
     range: {
       year: { min: "", max: "" },
       odometer_km: { min: "", max: "" },
       condition_grade: { min: "", max: "" },
-      starting_bid: { min: "", max: "" },
+      bid_amount: { min: "", max: "" },
       reserve_price: { min: "", max: "" },
       buy_now_price: { min: "", max: "" },
-      current_bid: { min: "", max: "" },
     },
     datetime: {
       auction_start: { min: "", max: "" },
@@ -115,22 +114,37 @@ export const FILTER_GROUPS = [
   {
     title: "Vehicle",
     fields: [
-      { name: "make", label: "Make", type: "checkboxes" },
-      { name: "model", label: "Model", type: "text", placeholder: "Search model" },
+      { name: "make", label: "Make", type: "searchable-checkboxes", selectorMode: "dropdown" },
+      { name: "model", label: "Model", type: "searchable-checkboxes", selectorMode: "inline" },
       { name: "year", label: "Year", type: "range", inputMode: "numeric", step: 1 },
-      { name: "trim", label: "Trim", type: "text", placeholder: "Search trim" },
-      { name: "body_style", label: "Body Style", type: "checkboxes" },
-      { name: "exterior_color", label: "Exterior Color", type: "checkboxes" },
-      { name: "interior_color", label: "Interior Color", type: "checkboxes" },
+      { name: "trim", label: "Trim", type: "searchable-checkboxes", selectorMode: "inline" },
+      { name: "body_style", label: "Body Style", type: "searchable-checkboxes", selectorMode: "inline" },
+      {
+        name: "exterior_color",
+        label: "Exterior Color",
+        type: "searchable-checkboxes",
+        selectorMode: "inline",
+      },
+      {
+        name: "interior_color",
+        label: "Interior Color",
+        type: "searchable-checkboxes",
+        selectorMode: "inline",
+      },
     ],
   },
   {
     title: "Mechanical",
     fields: [
-      { name: "engine", label: "Engine", type: "text", placeholder: "Search engine" },
-      { name: "transmission", label: "Transmission", type: "checkboxes" },
-      { name: "drivetrain", label: "Drivetrain", type: "checkboxes" },
-      { name: "fuel_type", label: "Fuel Type", type: "checkboxes" },
+      { name: "engine", label: "Engine", type: "searchable-checkboxes", selectorMode: "inline" },
+      {
+        name: "transmission",
+        label: "Transmission",
+        type: "searchable-checkboxes",
+        selectorMode: "inline",
+      },
+      { name: "drivetrain", label: "Drivetrain", type: "searchable-checkboxes", selectorMode: "inline" },
+      { name: "fuel_type", label: "Fuel Type", type: "searchable-checkboxes", selectorMode: "inline" },
       {
         name: "odometer_km",
         label: "Miles",
@@ -151,7 +165,12 @@ export const FILTER_GROUPS = [
         inputMode: "decimal",
         step: 0.1,
       },
-      { name: "title_status", label: "Title Status", type: "checkboxes" },
+      {
+        name: "title_status",
+        label: "Title Status",
+        type: "searchable-checkboxes",
+        selectorMode: "dropdown",
+      },
     ],
   },
   {
@@ -159,8 +178,8 @@ export const FILTER_GROUPS = [
     fields: [
       { name: "auction_start", label: "Auction Start", type: "datetime" },
       {
-        name: "starting_bid",
-        label: "Starting Bid",
+        name: "bid_amount",
+        label: "Bid Amount",
         type: "range",
         inputMode: "numeric",
         step: 100,
@@ -182,26 +201,23 @@ export const FILTER_GROUPS = [
         step: 100,
         prefix: "$",
       },
-      {
-        name: "current_bid",
-        label: "Current Bid",
-        type: "range",
-        inputMode: "numeric",
-        step: 100,
-        prefix: "$",
-      },
     ],
   },
   {
     title: "Location & Seller",
     fields: [
-      { name: "province", label: "Province", type: "checkboxes" },
-      { name: "city", label: "City", type: "text", placeholder: "Search city" },
+      {
+        name: "province",
+        label: "Province",
+        type: "searchable-checkboxes",
+        selectorMode: "dropdown",
+      },
+      { name: "city", label: "City", type: "searchable-checkboxes", selectorMode: "inline" },
       {
         name: "selling_dealership",
         label: "Selling Dealership",
-        type: "text",
-        placeholder: "Search dealership",
+        type: "searchable-checkboxes",
+        selectorMode: "inline",
       },
     ],
   },
@@ -406,6 +422,35 @@ export function formatAuctionDate(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+export function formatAuctionScheduleSpan(value) {
+  if (!value) {
+    return "";
+  }
+
+  const timestamp = new Date(value);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  });
+
+  const parts = Object.fromEntries(
+    formatter.formatToParts(timestamp).map((part) => [part.type, part.value]),
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
 }
 
 export function formatPurchaseDate(value) {
