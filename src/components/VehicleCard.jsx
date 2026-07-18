@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   formatAuctionDate,
   formatConditionGrade,
@@ -23,6 +23,48 @@ function getTitleStatusBadgeClassName(titleStatus) {
   return " vehicle-card-badge-warning";
 }
 
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect
+        x="9"
+        y="9"
+        width="10"
+        height="10"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function CopiedIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path
+        d="m5 12.5 4.2 4.2L19 7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 export default function VehicleCard({
   apiBaseUrl = "",
   currentUserId = null,
@@ -38,6 +80,8 @@ export default function VehicleCard({
   watchTogglePending = false,
 }) {
   const lastVehicleStateRef = useRef(null);
+  const copyFeedbackTimeoutRef = useRef(null);
+  const [isVinCopied, setIsVinCopied] = useState(false);
   const { biddingState, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
     apiBaseUrl,
     enabled: Boolean(vehicle?.id && showInlineBidding),
@@ -76,6 +120,15 @@ export default function VehicleCard({
       !vehicleIsPurchased,
   );
   const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
+  const hasVin = Boolean(displayVehicle.vin);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current) {
+        window.clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!onVehicleLiveStateChange || !displayVehicle?.id) {
@@ -110,6 +163,29 @@ export default function VehicleCard({
     displayVehicle?.starting_bid,
     onVehicleLiveStateChange,
   ]);
+
+  async function handleCopyVin(event) {
+    event.stopPropagation();
+
+    if (!displayVehicle.vin || !navigator?.clipboard?.writeText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(displayVehicle.vin);
+      setIsVinCopied(true);
+
+      if (copyFeedbackTimeoutRef.current) {
+        window.clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+
+      copyFeedbackTimeoutRef.current = window.setTimeout(() => {
+        setIsVinCopied(false);
+      }, 1800);
+    } catch {
+      setIsVinCopied(false);
+    }
+  }
 
   return (
     <article
@@ -160,6 +236,24 @@ export default function VehicleCard({
             </span>
             <span>{vehicleLocation}</span>
           </p>
+          {hasVin ? (
+            <div className="vehicle-card-vin-row">
+              <span className="vehicle-card-vin">{displayVehicle.vin}</span>
+              <button
+                aria-label={
+                  isVinCopied
+                    ? `Copied VIN ${displayVehicle.vin}`
+                    : `Copy VIN ${displayVehicle.vin} to clipboard`
+                }
+                className={`vehicle-card-copy-button ${isVinCopied ? "is-copied" : ""}`}
+                type="button"
+                onClick={handleCopyVin}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                {isVinCopied ? <CopiedIcon /> : <CopyIcon />}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {!showBidPanel ? (
@@ -172,7 +266,7 @@ export default function VehicleCard({
         ) : null}
 
         {showBuyNowButton || showBidPanel ? (
-          <div className="vehicle-card-footer">
+          <div className={`vehicle-card-footer ${showBidPanel ? "has-bid-panel" : ""}`.trim()}>
             {showBuyNowButton ? (
               <div className="vehicle-card-actions">
                 <div

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   formatAuctionDate,
   formatConditionGrade,
@@ -42,6 +42,48 @@ function DetailSection({ title, children }) {
   );
 }
 
+function CopyIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect
+        x="9"
+        y="9"
+        width="10"
+        height="10"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function CopiedIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path
+        d="m5 12.5 4.2 4.2L19 7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 export default function VehicleDetailsModal({
   apiBaseUrl = "",
   currentUserId = null,
@@ -58,6 +100,8 @@ export default function VehicleDetailsModal({
   vehicle,
   watchErrorMessage = "",
 }) {
+  const copyFeedbackTimeoutRef = useRef(null);
+  const [copiedField, setCopiedField] = useState("");
   const { biddingState, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
     apiBaseUrl,
     enabled: Boolean(vehicle),
@@ -87,12 +131,53 @@ export default function VehicleDetailsModal({
   const titleStatusBadgeClassName = getTitleStatusBadgeClassName(
     displayVehicle?.title_status,
   );
+  const formattedMiles = displayVehicle
+    ? formatMilesFromKm(displayVehicle.odometer_km)
+    : "";
+  const canCopyMiles = Boolean(formattedMiles && formattedMiles !== "N/A");
+  const hasVin = Boolean(displayVehicle?.vin);
+  const hasSidePanelContent = Boolean(
+    showBidPanel || showBuyNowButton || watchErrorMessage || purchaseMessage,
+  );
 
   useEffect(() => {
     if (!showBidPanel && stateErrorMessage) {
       console.error("[VehicleDetailsModal] Live bidding state error:", stateErrorMessage);
     }
   }, [showBidPanel, stateErrorMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimeoutRef.current) {
+        window.clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setCopiedField("");
+  }, [displayVehicle?.id]);
+
+  async function handleCopyValue(fieldName, value) {
+    if (!value || !navigator?.clipboard?.writeText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(fieldName);
+
+      if (copyFeedbackTimeoutRef.current) {
+        window.clearTimeout(copyFeedbackTimeoutRef.current);
+      }
+
+      copyFeedbackTimeoutRef.current = window.setTimeout(() => {
+        setCopiedField("");
+      }, 1800);
+    } catch {
+      setCopiedField("");
+    }
+  }
 
   return (
     <div className="modal-shell vehicle-detail-shell" role="dialog" aria-modal="true">
@@ -101,11 +186,21 @@ export default function VehicleDetailsModal({
         <header className="vehicle-detail-header">
           <div>
             <p className="inventory-panel-label">Vehicle details</p>
-            <h2>{vehicleTitle}</h2>
           </div>
-          <button className="modal-close-button" type="button" onClick={onClose}>
-            Close
-          </button>
+          <div className="vehicle-detail-header-actions">
+            {displayVehicle ? (
+              <WatchToggleButton
+                className="vehicle-watch-toggle-detail"
+                disabled={isWatchPending}
+                isWatched={isWatched}
+                label={watchToggleLabel}
+                onToggle={onToggleWatch}
+              />
+            ) : null}
+            <button className="modal-close-button" type="button" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </header>
 
         {isLoading ? (
@@ -118,33 +213,104 @@ export default function VehicleDetailsModal({
 
         {!isLoading && !errorMessage && displayVehicle ? (
           <div className="vehicle-detail-content">
-            <section className="vehicle-detail-top">
-              {leadImageUrl ? (
-                <button
-                  className="vehicle-detail-hero-image-button"
-                  type="button"
-                  onClick={() => onOpenImage(leadImageUrl)}
-                >
-                  <div className="vehicle-detail-hero-badges">
-                    <span
-                      className={`vehicle-detail-hero-badge${titleStatusBadgeClassName}`}
-                    >
-                      {displayVehicle.title_status ?? "N/A"}
-                    </span>
-                    <span className="vehicle-detail-hero-badge">
-                      Grade {formatConditionGrade(displayVehicle.condition_grade)}
-                    </span>
+            <section
+              className={`vehicle-detail-top ${hasSidePanelContent ? "" : "vehicle-detail-top-single"}`.trim()}
+            >
+              <div className="vehicle-detail-hero-stack">
+                {leadImageUrl ? (
+                  <button
+                    className="vehicle-detail-hero-image-button"
+                    type="button"
+                    onClick={() => onOpenImage(leadImageUrl)}
+                  >
+                    <img
+                      alt={vehicleTitle}
+                      className="vehicle-detail-hero-image"
+                      src={leadImageUrl}
+                    />
+                    <div className="vehicle-detail-hero-overlay">
+                      <h2 className="vehicle-detail-hero-title">{vehicleTitle}</h2>
+                      <div className="vehicle-detail-hero-badges">
+                        <span
+                          className={`vehicle-detail-hero-badge${titleStatusBadgeClassName}`}
+                        >
+                          {displayVehicle.title_status ?? "N/A"}
+                        </span>
+                        <span className="vehicle-detail-hero-badge">
+                          {formatConditionGrade(displayVehicle.condition_grade)}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ) : (
+                  <div className="vehicle-detail-hero-fallback">
+                    <h2 className="vehicle-detail-hero-title">{vehicleTitle}</h2>
+                    <div className="vehicle-detail-hero-badges">
+                      <span
+                        className={`vehicle-detail-hero-badge${titleStatusBadgeClassName}`}
+                      >
+                        {displayVehicle.title_status ?? "N/A"}
+                      </span>
+                      <span className="vehicle-detail-hero-badge">
+                        {formatConditionGrade(displayVehicle.condition_grade)}
+                      </span>
+                    </div>
                   </div>
-                  <img
-                    alt={vehicleTitle}
-                    className="vehicle-detail-hero-image"
-                    src={leadImageUrl}
-                  />
-                </button>
-              ) : null}
+                )}
 
-              <div className="vehicle-detail-summary-stack">
-                <div className="vehicle-detail-action-stack">
+                <dl className="vehicle-detail-meta-row">
+                  <div className="vehicle-detail-meta-card">
+                    <dt>Miles</dt>
+                    <dd>{formattedMiles}</dd>
+                    <button
+                      aria-label={
+                        copiedField === "miles"
+                          ? `Copied miles ${formattedMiles}`
+                          : `Copy miles ${formattedMiles} to clipboard`
+                      }
+                      className={`vehicle-card-copy-button ${copiedField === "miles" ? "is-copied" : ""}`}
+                      disabled={!canCopyMiles}
+                      type="button"
+                      onClick={() => handleCopyValue("miles", formattedMiles)}
+                    >
+                      {copiedField === "miles" ? <CopiedIcon /> : <CopyIcon />}
+                    </button>
+                  </div>
+                  <div className="vehicle-detail-meta-card">
+                    <dt>VIN</dt>
+                    <dd>{displayVehicle.vin ?? "N/A"}</dd>
+                    <button
+                      aria-label={
+                        copiedField === "vin"
+                          ? `Copied VIN ${displayVehicle.vin}`
+                          : `Copy VIN ${displayVehicle.vin} to clipboard`
+                      }
+                      className={`vehicle-card-copy-button ${copiedField === "vin" ? "is-copied" : ""}`}
+                      disabled={!hasVin}
+                      type="button"
+                      onClick={() => handleCopyValue("vin", displayVehicle.vin)}
+                    >
+                      {copiedField === "vin" ? <CopiedIcon /> : <CopyIcon />}
+                    </button>
+                  </div>
+                </dl>
+              </div>
+
+              {hasSidePanelContent ? (
+                <div className="vehicle-detail-side-panel">
+                  {showBidPanel ? (
+                    <VehicleBidPanel
+                      apiBaseUrl={apiBaseUrl}
+                      biddingState={biddingState}
+                      displayVehicle={displayVehicle}
+                      isPurchased={vehicleIsPurchased}
+                      onBidPlaced={onBidPlaced}
+                      stateErrorMessage={stateErrorMessage}
+                      userId={currentUserId}
+                      variant="detail"
+                    />
+                  ) : null}
+
                   {showBuyNowButton ? (
                     <BuyNowButton
                       className="vehicle-buy-now-detail"
@@ -153,66 +319,20 @@ export default function VehicleDetailsModal({
                       onClick={() => onBuyNow?.(displayVehicle)}
                     />
                   ) : null}
-                </div>
 
-                <div className="vehicle-detail-summary">
-                  <div className="vehicle-detail-summary-primary">
-                    <div className="vehicle-detail-summary-pills">
-                      <span>{formatMilesFromKm(displayVehicle.odometer_km)}</span>
-                    </div>
-                    <div className="vehicle-detail-summary-actions">
-                      <WatchToggleButton
-                        className="vehicle-watch-toggle-detail"
-                        disabled={isWatchPending}
-                        isWatched={isWatched}
-                        label={watchToggleLabel}
-                        onToggle={onToggleWatch}
-                      />
-                    </div>
-                  </div>
-                  <dl className="vehicle-detail-summary-stats">
-                    <div>
-                      <dt>Current bid</dt>
-                      <dd>{formatCurrency(summaryPrice)}</dd>
-                    </div>
-                    <div>
-                      <dt>Auction</dt>
-                      <dd>{formatAuctionDate(displayVehicle.auction_start)}</dd>
-                    </div>
-                    <div>
-                      <dt>Starting bid</dt>
-                      <dd>{formatCurrency(displayVehicle.starting_bid)}</dd>
-                    </div>
-                    <div>
-                      <dt>Bid count</dt>
-                      <dd>{displayVehicle.bid_count.toLocaleString()}</dd>
-                    </div>
-                  </dl>
                   {watchErrorMessage ? (
-                    <div className="vehicle-detail-inline-message" role="status">
+                    <div className="vehicle-detail-inline-message error" role="status">
                       {watchErrorMessage}
                     </div>
                   ) : null}
+
                   {purchaseMessage ? (
                     <div className="vehicle-detail-inline-message" role="status">
                       {purchaseMessage}
                     </div>
                   ) : null}
                 </div>
-
-                {showBidPanel ? (
-                  <VehicleBidPanel
-                    apiBaseUrl={apiBaseUrl}
-                    biddingState={biddingState}
-                    displayVehicle={displayVehicle}
-                    isPurchased={vehicleIsPurchased}
-                    onBidPlaced={onBidPlaced}
-                    stateErrorMessage={stateErrorMessage}
-                    userId={currentUserId}
-                    variant="detail"
-                  />
-                ) : null}
-              </div>
+              ) : null}
             </section>
 
             <div className="vehicle-detail-sections">
@@ -234,10 +354,6 @@ export default function VehicleDetailsModal({
                   />
                   <DetailItem label="Drivetrain" value={displayVehicle.drivetrain ?? "N/A"} />
                   <DetailItem label="Fuel type" value={displayVehicle.fuel_type ?? "N/A"} />
-                  <DetailItem
-                    label="Odometer"
-                    value={formatMilesFromKm(displayVehicle.odometer_km)}
-                  />
                 </dl>
               </DetailSection>
 
@@ -301,7 +417,6 @@ export default function VehicleDetailsModal({
                   <DetailItem label="Lot" value={displayVehicle.lot ?? "N/A"} />
                   <DetailItem label="City" value={displayVehicle.city ?? "N/A"} />
                   <DetailItem label="Province" value={displayVehicle.province ?? "N/A"} />
-                  <DetailItem label="VIN" value={displayVehicle.vin} />
                   <DetailItem label="Vehicle ID" value={displayVehicle.id} />
                 </dl>
               </DetailSection>
