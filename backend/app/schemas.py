@@ -72,7 +72,6 @@ NUMERIC_FIELDS = {
     "odometer_km",
     "condition_grade",
     "starting_bid",
-    "reserve_price",
     "buy_now_price",
     "current_bid",
     "bid_count",
@@ -290,7 +289,6 @@ class VehicleResponse(BaseModel):
     city: str | None = None
     auction_start: str | None = None
     starting_bid: float | None = None
-    reserve_price: float | None = None
     buy_now_price: float | None = None
     images: list[str]
     selling_dealership: str | None = None

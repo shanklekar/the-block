@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  formatAuctionDate,
-  formatConditionGrade,
-  formatCurrency,
-  formatMilesFromKm,
-} from "../inventoryConfig";
+import { formatConditionGrade, formatMilesFromKm } from "../inventoryConfig";
 import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
 import BuyNowButton from "./BuyNowButton";
 import VehicleBidPanel from "./VehicleBidPanel";
@@ -24,11 +19,19 @@ function getTitleStatusBadgeClassName(titleStatus) {
   return " vehicle-detail-hero-badge-warning";
 }
 
+function formatDetailValue(value) {
+  if (typeof value !== "string" || !value.length) {
+    return value;
+  }
+
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
 function DetailItem({ label, value }) {
   return (
     <div className="vehicle-detail-item">
       <dt>{label}</dt>
-      <dd>{value}</dd>
+      <dd>{formatDetailValue(value)}</dd>
     </div>
   );
 }
@@ -115,7 +118,6 @@ export default function VehicleDetailsModal({
         .filter(Boolean)
         .join(" ")
     : "Vehicle details";
-  const summaryPrice = displayVehicle?.current_bid ?? displayVehicle?.starting_bid;
   const leadImageUrl = displayVehicle?.images[0] ?? "";
   const isWatched = Boolean(displayVehicle?.is_watched);
   const watchToggleLabel = isWatched
@@ -341,32 +343,6 @@ export default function VehicleDetailsModal({
                 </dl>
               </DetailSection>
 
-              <DetailSection title="Auction and pricing">
-                <dl className="vehicle-detail-grid">
-                  <DetailItem
-                    label="Starting bid"
-                    value={formatCurrency(displayVehicle.starting_bid)}
-                  />
-                  <DetailItem label="Current bid" value={formatCurrency(summaryPrice)} />
-                  <DetailItem
-                    label="Reserve price"
-                    value={formatCurrency(displayVehicle.reserve_price)}
-                  />
-                  <DetailItem
-                    label="Buy now price"
-                    value={formatCurrency(displayVehicle.buy_now_price)}
-                  />
-                  <DetailItem
-                    label="Bid count"
-                    value={displayVehicle.bid_count.toLocaleString()}
-                  />
-                  <DetailItem
-                    label="Auction start"
-                    value={formatAuctionDate(displayVehicle.auction_start)}
-                  />
-                </dl>
-              </DetailSection>
-
               <DetailSection title="Condition">
                 <dl className="vehicle-detail-grid">
                   <DetailItem
@@ -398,10 +374,8 @@ export default function VehicleDetailsModal({
                     label="Selling dealership"
                     value={displayVehicle.selling_dealership ?? "N/A"}
                   />
-                  <DetailItem label="Lot" value={displayVehicle.lot ?? "N/A"} />
                   <DetailItem label="City" value={displayVehicle.city ?? "N/A"} />
                   <DetailItem label="Province" value={displayVehicle.province ?? "N/A"} />
-                  <DetailItem label="Vehicle ID" value={displayVehicle.id} />
                 </dl>
               </DetailSection>
             </div>
@@ -410,7 +384,6 @@ export default function VehicleDetailsModal({
               <div className="vehicle-detail-gallery-header">
                 <div>
                   <p className="inventory-panel-label">Photos</p>
-                  <h3>Full image set</h3>
                 </div>
                 <span className="inventory-results-pill">
                   {displayVehicle.images.length.toLocaleString()} images

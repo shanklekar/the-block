@@ -187,6 +187,7 @@ export default function App() {
   }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
 
   function openVehicleDetails(vehicleId) {
+    console.log("[VehicleDetailsModal] Open vehicle:", vehicleId);
     setSelectedImageUrl("");
     setVehicleDetailsPurchaseMessage("");
     setSelectedVehicleId(vehicleId);

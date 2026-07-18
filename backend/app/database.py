@@ -65,6 +65,7 @@ def serialize_vehicle(
     auction_start_offset: timedelta | None = None,
 ) -> dict[str, Any]:
     vehicle = dict(row)
+    vehicle.pop("reserve_price", None)
     vehicle["damage_notes"] = _parse_json_column(vehicle.get("damage_notes"))
     vehicle["images"] = _parse_json_column(vehicle.get("images"))
     if auction_start_offset is not None:
