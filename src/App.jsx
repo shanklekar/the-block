@@ -242,58 +242,6 @@ export default function App() {
     setBidVehicle(vehicle);
   }
 
-  async function handleRequestLiveSearchBid(vehicle) {
-    if (
-      !vehicle ||
-      vehicle.is_purchased ||
-      vehicle.is_purchased_by_user ||
-      purchasedVehicleIds[vehicle.id] ||
-      soldVehicleIds[vehicle.id]
-    ) {
-      return;
-    }
-
-    setPurchaseFeedbackTone("info");
-    setPurchaseFeedbackMessage("");
-    setVehicleDetailsPurchaseMessage("");
-    setVehicleDetailsWatchErrorMessage("");
-
-    if (vehicle.is_watched) {
-      handleRequestBid(vehicle);
-      return;
-    }
-
-    try {
-      const response = await fetch(WATCH_MUTATION_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          vehicle_id: vehicle.id,
-          watch: true,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Unable to update watchlist.");
-      }
-
-      const payload = await response.json();
-      handleWatchStateChanged({
-        isWatched: payload.is_watched,
-        vehicleId: payload.vehicle_id,
-      });
-      handleRequestBid({
-        ...vehicle,
-        is_watched: payload.is_watched,
-      });
-    } catch {
-      setPurchaseFeedbackTone("error");
-      setPurchaseFeedbackMessage("We couldn't update that watchlist item.");
-    }
-  }
-
   async function handleConfirmBuyNow() {
     if (!buyNowVehicle || isBuyNowPending) {
       return;
@@ -528,7 +476,7 @@ export default function App() {
           hiddenVehicleIds={soldVehicleIds}
           isBootstrapping={isBootstrapping}
           onRequestBuyNow={handleRequestBuyNow}
-          onRequestBid={handleRequestLiveSearchBid}
+          onRequestBid={handleRequestBid}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Live search results"

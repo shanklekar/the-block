@@ -9,6 +9,20 @@ import BidNowButton from "./BidNowButton";
 import BuyNowButton from "./BuyNowButton";
 import WatchToggleButton from "./WatchToggleButton";
 
+function getTitleStatusBadgeClassName(titleStatus) {
+  const normalizedTitleStatus = titleStatus?.trim().toLowerCase();
+
+  if (normalizedTitleStatus === "salvage") {
+    return " vehicle-card-badge-danger";
+  }
+
+  if (normalizedTitleStatus === "clean") {
+    return "";
+  }
+
+  return " vehicle-card-badge-warning";
+}
+
 export default function VehicleCard({
   apiBaseUrl = "",
   bidActionMode = "active-only",
@@ -50,14 +64,13 @@ export default function VehicleCard({
   const showBuyNowButton =
     Number(displayVehicle.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
   const minimumNextBid = biddingState?.minimum_next_bid ?? null;
-  const showLiveSearchBidButton =
-    bidActionMode === "watch-before-bid" && !vehicleIsSold && !vehicleIsPurchased;
   const showActiveBidButton =
     bidActionMode === "active-only" &&
     canBid &&
     !vehicleIsSold &&
     !vehicleIsPurchased &&
     minimumNextBid;
+  const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
 
   return (
     <article
@@ -91,7 +104,7 @@ export default function VehicleCard({
           />
         ) : null}
         <div className="vehicle-card-badge-row">
-          <span className="vehicle-card-badge">
+          <span className={`vehicle-card-badge${titleStatusClassName}`}>
             {displayVehicle.title_status ?? "Untitled"}
           </span>
           <span className="vehicle-card-badge">{vehicleGrade}</span>
@@ -106,18 +119,10 @@ export default function VehicleCard({
 
         <dl className="vehicle-card-specs">
           <div>
-            <dt>Trim</dt>
-            <dd>{displayVehicle.trim ?? "N/A"}</dd>
-          </div>
-          <div>
             <dt>Location</dt>
             <dd>
               {displayVehicle.city ?? "Unknown"}, {displayVehicle.province ?? "N/A"}
             </dd>
-          </div>
-          <div>
-            <dt>Current bid</dt>
-            <dd>{formatCurrency(displayVehicle.current_bid ?? displayVehicle.starting_bid)}</dd>
           </div>
           <div>
             <dt>Auction</dt>
@@ -125,7 +130,7 @@ export default function VehicleCard({
           </div>
         </dl>
 
-        {showLiveSearchBidButton || showActiveBidButton || showBuyNowButton ? (
+        {showActiveBidButton || showBuyNowButton ? (
           <div className="vehicle-card-actions">
             {showBuyNowButton ? (
               <div
@@ -139,22 +144,6 @@ export default function VehicleCard({
                   onClick={(event) => {
                     event.stopPropagation();
                     onBuyNow?.(displayVehicle);
-                  }}
-                />
-              </div>
-            ) : null}
-
-            {showLiveSearchBidButton ? (
-              <div
-                className="vehicle-card-bid-now"
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                <BidNowButton
-                  label="Bid on this vehicle"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRequestBid?.(displayVehicle);
                   }}
                 />
               </div>

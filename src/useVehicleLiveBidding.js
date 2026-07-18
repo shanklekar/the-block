@@ -86,6 +86,23 @@ export function useVehicleLiveBidding({
   const [biddingState, setBiddingState] = useState(() => buildInitialBiddingState(vehicle));
   const [stateErrorMessage, setStateErrorMessage] = useState("");
   const websocketRef = useRef(null);
+  const websocketLifecycleRef = useRef(null);
+
+  function closeCurrentWebSocket() {
+    const currentWebsocket = websocketRef.current;
+    const lifecycleState = websocketLifecycleRef.current;
+
+    if (!currentWebsocket || !lifecycleState) {
+      websocketRef.current = null;
+      websocketLifecycleRef.current = null;
+      return;
+    }
+
+    lifecycleState.intentionalClose = true;
+    websocketRef.current = null;
+    websocketLifecycleRef.current = null;
+    currentWebsocket.close();
+  }
 
   useEffect(() => {
     setBiddingState(buildInitialBiddingState(vehicle));
@@ -136,23 +153,50 @@ export function useVehicleLiveBidding({
 
   useEffect(() => {
     if (!enabled || !vehicle?.id || userId === null || userId === undefined) {
-      websocketRef.current?.close();
-      websocketRef.current = null;
+      closeCurrentWebSocket();
+      setStateErrorMessage("");
       return undefined;
     }
 
     if (!biddingState?.auction_started || biddingState?.is_sold) {
-      websocketRef.current?.close();
-      websocketRef.current = null;
+      closeCurrentWebSocket();
+      setStateErrorMessage("");
       return undefined;
     }
 
     const websocket = new WebSocket(
       `${toWebSocketUrl(apiBaseUrl)}/ws/vehicles/${vehicle.id}/bidding?user_id=${userId}`,
     );
+    const lifecycleState = {
+      hadError: false,
+      intentionalClose: false,
+      opened: false,
+    };
     websocketRef.current = websocket;
+    websocketLifecycleRef.current = lifecycleState;
+
+    function isCurrentConnection() {
+      return (
+        websocketRef.current === websocket &&
+        websocketLifecycleRef.current === lifecycleState
+      );
+    }
+
+    websocket.addEventListener("open", () => {
+      if (!isCurrentConnection()) {
+        return;
+      }
+
+      lifecycleState.opened = true;
+      lifecycleState.hadError = false;
+      setStateErrorMessage("");
+    });
 
     websocket.addEventListener("message", (event) => {
+      if (!isCurrentConnection()) {
+        return;
+      }
+
       try {
         const payload = JSON.parse(event.data);
         setBiddingState(payload);
@@ -162,20 +206,43 @@ export function useVehicleLiveBidding({
     });
 
     websocket.addEventListener("error", () => {
-      setStateErrorMessage("We couldn't keep the live bid feed connected.");
+      if (!isCurrentConnection() || lifecycleState.intentionalClose) {
+        return;
+      }
+
+      lifecycleState.hadError = true;
     });
 
     websocket.addEventListener("close", () => {
+      if (!isCurrentConnection()) {
+        return;
+      }
+
+      websocketRef.current = null;
+      websocketLifecycleRef.current = null;
+
+      if (lifecycleState.intentionalClose) {
+        return;
+      }
+
+      if (enabled && biddingState?.auction_started && !biddingState?.is_sold) {
+        setStateErrorMessage("We couldn't keep the live bid feed connected.");
+      }
+
       if (websocketRef.current === websocket) {
         websocketRef.current = null;
       }
     });
 
     return () => {
-      websocket.close();
-      if (websocketRef.current === websocket) {
+      lifecycleState.intentionalClose = true;
+
+      if (isCurrentConnection()) {
         websocketRef.current = null;
+        websocketLifecycleRef.current = null;
       }
+
+      websocket.close();
     };
   }, [
     apiBaseUrl,

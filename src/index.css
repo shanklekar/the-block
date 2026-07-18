@@ -574,6 +574,16 @@ img {
   backdrop-filter: blur(8px);
 }
 
+.vehicle-card-badge-warning {
+  background: rgba(217, 160, 0, 0.92);
+  color: #3b2a00;
+}
+
+.vehicle-card-badge-danger {
+  background: rgba(186, 43, 43, 0.92);
+  color: #fff3f3;
+}
+
 .vehicle-card-body {
   display: flex;
   flex: 1;
@@ -898,6 +908,16 @@ img {
   letter-spacing: 0.02em;
   text-transform: capitalize;
   backdrop-filter: blur(8px);
+}
+
+.vehicle-detail-hero-badge-warning {
+  background: rgba(245, 203, 66, 0.92);
+  color: #3b2a00;
+}
+
+.vehicle-detail-hero-badge-danger {
+  background: rgba(186, 43, 43, 0.92);
+  color: #fff3f3;
 }
 
 .vehicle-detail-hero-image {

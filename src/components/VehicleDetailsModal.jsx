@@ -9,6 +9,20 @@ import BidNowButton from "./BidNowButton";
 import BuyNowButton from "./BuyNowButton";
 import WatchToggleButton from "./WatchToggleButton";
 
+function getTitleStatusBadgeClassName(titleStatus) {
+  const normalizedTitleStatus = titleStatus?.trim().toLowerCase();
+
+  if (normalizedTitleStatus === "salvage") {
+    return " vehicle-detail-hero-badge-danger";
+  }
+
+  if (normalizedTitleStatus === "clean") {
+    return "";
+  }
+
+  return " vehicle-detail-hero-badge-warning";
+}
+
 function DetailItem({ label, value }) {
   return (
     <div className="vehicle-detail-item">
@@ -72,6 +86,9 @@ export default function VehicleDetailsModal({
     : vehicleIsSold
       ? "This vehicle has already been sold."
       : "";
+  const titleStatusBadgeClassName = getTitleStatusBadgeClassName(
+    displayVehicle?.title_status,
+  );
 
   return (
     <div className="modal-shell vehicle-detail-shell" role="dialog" aria-modal="true">
@@ -105,7 +122,9 @@ export default function VehicleDetailsModal({
                   onClick={() => onOpenImage(leadImageUrl)}
                 >
                   <div className="vehicle-detail-hero-badges">
-                    <span className="vehicle-detail-hero-badge">
+                    <span
+                      className={`vehicle-detail-hero-badge${titleStatusBadgeClassName}`}
+                    >
                       {displayVehicle.title_status ?? "N/A"}
                     </span>
                     <span className="vehicle-detail-hero-badge">
