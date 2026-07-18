@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   formatAuctionDate,
   formatConditionGrade,
@@ -86,6 +87,12 @@ export default function VehicleDetailsModal({
   const titleStatusBadgeClassName = getTitleStatusBadgeClassName(
     displayVehicle?.title_status,
   );
+
+  useEffect(() => {
+    if (!showBidPanel && stateErrorMessage) {
+      console.error("[VehicleDetailsModal] Live bidding state error:", stateErrorMessage);
+    }
+  }, [showBidPanel, stateErrorMessage]);
 
   return (
     <div className="modal-shell vehicle-detail-shell" role="dialog" aria-modal="true">
@@ -184,11 +191,6 @@ export default function VehicleDetailsModal({
                   {watchErrorMessage ? (
                     <div className="vehicle-detail-inline-message" role="status">
                       {watchErrorMessage}
-                    </div>
-                  ) : null}
-                  {!showBidPanel && stateErrorMessage ? (
-                    <div className="vehicle-detail-inline-message" role="status">
-                      {stateErrorMessage}
                     </div>
                   ) : null}
                   {purchaseMessage ? (

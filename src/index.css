@@ -735,6 +735,22 @@ img {
   box-shadow: none;
 }
 
+.bid-submit-button.is-high-bidder,
+.bid-submit-button.is-high-bidder:disabled {
+  border: 2px solid #c62828;
+  background: linear-gradient(135deg, #f9d648, #f2b800);
+  color: #3a2500;
+  cursor: default;
+  opacity: 1;
+  box-shadow: 0 14px 28px rgba(184, 132, 0, 0.22);
+}
+
+.bid-submit-button.is-high-bidder:focus-visible {
+  box-shadow:
+    0 0 0 4px rgba(255, 240, 166, 0.65),
+    0 18px 30px rgba(184, 132, 0, 0.28);
+}
+
 .vehicle-bid-panel {
   display: grid;
   gap: 14px;
@@ -748,6 +764,7 @@ img {
 
 .vehicle-bid-panel-card {
   margin-top: auto;
+  min-height: 438px;
 }
 
 .vehicle-bid-panel-detail {
@@ -755,29 +772,33 @@ img {
 }
 
 .vehicle-bid-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  gap: 8px;
 }
 
-.vehicle-bid-panel-header h4 {
-  margin: 4px 0 0;
-  color: var(--text-primary);
-  font-size: 1.05rem;
-  letter-spacing: -0.03em;
+.vehicle-bid-panel-auction-block {
+  display: grid;
+  gap: 4px;
+}
+
+.vehicle-bid-panel-auction-label {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .vehicle-bid-panel-auction {
-  color: var(--text-muted);
-  font-size: 0.82rem;
+  color: var(--text-primary);
+  font-size: 0.88rem;
   font-weight: 700;
-  text-align: right;
+  line-height: 1.35;
 }
 
 .vehicle-bid-panel-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -786,6 +807,10 @@ img {
   border-radius: 18px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.88);
+}
+
+.vehicle-bid-panel-summary-card-primary {
+  border-color: rgba(198, 40, 40, 0.12);
 }
 
 .vehicle-bid-panel-summary-card span {
@@ -804,9 +829,14 @@ img {
   letter-spacing: -0.03em;
 }
 
+.vehicle-bid-panel-summary-card-primary strong {
+  font-size: 1.32rem;
+}
+
 .vehicle-bid-panel-form {
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
 .vehicle-bid-panel-input-group {
@@ -824,12 +854,20 @@ img {
   padding: 14px 16px;
   background: #fff;
   color: var(--text-primary);
+  appearance: textfield;
+  -moz-appearance: textfield;
 }
 
 .vehicle-bid-panel-input:focus-visible {
   outline: none;
   border-color: rgba(33, 71, 201, 0.45);
   box-shadow: 0 0 0 4px rgba(165, 194, 255, 0.28);
+}
+
+.vehicle-bid-panel-input::-webkit-outer-spin-button,
+.vehicle-bid-panel-input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 .vehicle-bid-panel-shortcuts {
@@ -1533,8 +1571,8 @@ img {
     grid-template-columns: 1fr;
   }
 
-  .vehicle-bid-panel-header {
-    flex-direction: column;
+  .vehicle-bid-panel-card {
+    min-height: 0;
   }
 
   .buy-now-confirmation-actions {
