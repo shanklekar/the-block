@@ -57,14 +57,19 @@ export default function WatchToggleButton({
   isWatched = false,
   label = "",
   onToggle,
+  variant = "default",
 }) {
   const buttonText = isWatched ? "Unwatch" : "Watch";
+  const variantClassName =
+    variant === "modal-header"
+      ? "vehicle-watch-toggle-modal-header"
+      : "";
 
   return (
     <button
       aria-label={label}
       aria-pressed={isWatched}
-      className={`vehicle-watch-toggle ${isWatched ? "is-watched" : ""} ${className}`.trim()}
+      className={`vehicle-watch-toggle ${variantClassName} ${isWatched ? "is-watched" : ""} ${className}`.trim()}
       disabled={disabled}
       type="button"
       onClick={onToggle}

@@ -134,7 +134,6 @@ export default function VehicleDetailsModal({
   const formattedMiles = displayVehicle
     ? formatMilesFromKm(displayVehicle.odometer_km)
     : "";
-  const canCopyMiles = Boolean(formattedMiles && formattedMiles !== "N/A");
   const hasVin = Boolean(displayVehicle?.vin);
   const hasSidePanelContent = Boolean(
     showBidPanel || showBuyNowButton || watchErrorMessage || purchaseMessage,
@@ -184,8 +183,9 @@ export default function VehicleDetailsModal({
       <div className="modal-backdrop" onClick={onClose} />
       <section className="vehicle-detail-modal">
         <header className="vehicle-detail-header">
-          <div>
+          <div className="vehicle-detail-header-copy">
             <p className="inventory-panel-label">Vehicle details</p>
+            {displayVehicle ? <h2>{vehicleTitle}</h2> : null}
           </div>
           <div className="vehicle-detail-header-actions">
             {displayVehicle ? (
@@ -195,6 +195,7 @@ export default function VehicleDetailsModal({
                 isWatched={isWatched}
                 label={watchToggleLabel}
                 onToggle={onToggleWatch}
+                variant="modal-header"
               />
             ) : null}
             <button className="modal-close-button" type="button" onClick={onClose}>
@@ -229,7 +230,6 @@ export default function VehicleDetailsModal({
                       src={leadImageUrl}
                     />
                     <div className="vehicle-detail-hero-overlay">
-                      <h2 className="vehicle-detail-hero-title">{vehicleTitle}</h2>
                       <div className="vehicle-detail-hero-badges">
                         <span
                           className={`vehicle-detail-hero-badge${titleStatusBadgeClassName}`}
@@ -244,7 +244,6 @@ export default function VehicleDetailsModal({
                   </button>
                 ) : (
                   <div className="vehicle-detail-hero-fallback">
-                    <h2 className="vehicle-detail-hero-title">{vehicleTitle}</h2>
                     <div className="vehicle-detail-hero-badges">
                       <span
                         className={`vehicle-detail-hero-badge${titleStatusBadgeClassName}`}
@@ -258,41 +257,26 @@ export default function VehicleDetailsModal({
                   </div>
                 )}
 
-                <dl className="vehicle-detail-meta-row">
-                  <div className="vehicle-detail-meta-card">
-                    <dt>Miles</dt>
+                <dl className="vehicle-detail-meta-card">
+                  <div className="vehicle-detail-meta-item">
                     <dd>{formattedMiles}</dd>
-                    <button
-                      aria-label={
-                        copiedField === "miles"
-                          ? `Copied miles ${formattedMiles}`
-                          : `Copy miles ${formattedMiles} to clipboard`
-                      }
-                      className={`vehicle-card-copy-button ${copiedField === "miles" ? "is-copied" : ""}`}
-                      disabled={!canCopyMiles}
-                      type="button"
-                      onClick={() => handleCopyValue("miles", formattedMiles)}
-                    >
-                      {copiedField === "miles" ? <CopiedIcon /> : <CopyIcon />}
-                    </button>
                   </div>
-                  <div className="vehicle-detail-meta-card">
-                    <dt>VIN</dt>
+                  <div className="vehicle-detail-meta-item vehicle-detail-meta-item-vin">
                     <dd>{displayVehicle.vin ?? "N/A"}</dd>
-                    <button
-                      aria-label={
-                        copiedField === "vin"
-                          ? `Copied VIN ${displayVehicle.vin}`
-                          : `Copy VIN ${displayVehicle.vin} to clipboard`
-                      }
-                      className={`vehicle-card-copy-button ${copiedField === "vin" ? "is-copied" : ""}`}
-                      disabled={!hasVin}
-                      type="button"
-                      onClick={() => handleCopyValue("vin", displayVehicle.vin)}
-                    >
-                      {copiedField === "vin" ? <CopiedIcon /> : <CopyIcon />}
-                    </button>
                   </div>
+                  <button
+                    aria-label={
+                      copiedField === "vin"
+                        ? `Copied VIN ${displayVehicle.vin}`
+                        : `Copy VIN ${displayVehicle.vin} to clipboard`
+                    }
+                    className={`vehicle-card-copy-button ${copiedField === "vin" ? "is-copied" : ""}`}
+                    disabled={!hasVin}
+                    type="button"
+                    onClick={() => handleCopyValue("vin", displayVehicle.vin)}
+                  >
+                    {copiedField === "vin" ? <CopiedIcon /> : <CopyIcon />}
+                  </button>
                 </dl>
               </div>
 
