@@ -327,6 +327,23 @@ class WatchingMutationResponse(BaseModel):
     is_watched: bool
 
 
+class PurchaseMutationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vehicle_id: str = Field(min_length=1)
+    buy_now_price: float
+
+
+class PurchaseMutationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    vehicle_id: str
+    purchase_amount: float
+    purchase_date: str
+    is_purchased: bool
+
+
 class NumericMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import BuyNowConfirmationModal from "./components/BuyNowConfirmationModal";
 import InventorySection from "./components/InventorySection";
 import OpenlaneLogo from "./components/OpenlaneLogo";
 import VehicleDetailsModal from "./components/VehicleDetailsModal";
@@ -22,6 +23,8 @@ export default function App() {
   const [vehicleDetailsWatchErrorMessage, setVehicleDetailsWatchErrorMessage] = useState("");
   const [isVehicleDetailsWatchPending, setIsVehicleDetailsWatchPending] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
+  const [buyNowVehicle, setBuyNowVehicle] = useState(null);
+  const [purchasedVehicleIds, setPurchasedVehicleIds] = useState({});
 
   const vehicleDetailsRequestRef = useRef(null);
 
@@ -125,7 +128,7 @@ export default function App() {
   }, [selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !selectedImageUrl) {
+    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle) {
       return undefined;
     }
 
@@ -139,6 +142,11 @@ export default function App() {
         return;
       }
 
+      if (buyNowVehicle) {
+        setBuyNowVehicle(null);
+        return;
+      }
+
       setSelectedVehicleId("");
       setSelectedVehicle(null);
       setVehicleDetailsErrorMessage("");
@@ -149,10 +157,10 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [selectedImageUrl, selectedVehicleId]);
+  }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !selectedImageUrl) {
+    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle) {
       return undefined;
     }
 
@@ -162,7 +170,7 @@ export default function App() {
     return () => {
       document.body.style.overflow = overflow;
     };
-  }, [selectedImageUrl, selectedVehicleId]);
+  }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
 
   function openVehicleDetails(vehicleId) {
     setSelectedImageUrl("");
@@ -178,6 +186,26 @@ export default function App() {
     setVehicleDetailsErrorMessage("");
     setVehicleDetailsWatchErrorMessage("");
     setIsVehicleDetailsWatchPending(false);
+  }
+
+  function handleRequestBuyNow(vehicle) {
+    if (!vehicle || Number(vehicle.buy_now_price) <= 0 || purchasedVehicleIds[vehicle.id]) {
+      return;
+    }
+
+    setBuyNowVehicle(vehicle);
+  }
+
+  function handleConfirmBuyNow() {
+    if (!buyNowVehicle) {
+      return;
+    }
+
+    setPurchasedVehicleIds((currentIds) => ({
+      ...currentIds,
+      [buyNowVehicle.id]: true,
+    }));
+    setBuyNowVehicle(null);
   }
 
   function handleWatchStateChanged({ isWatched, vehicleId } = {}) {
@@ -256,9 +284,11 @@ export default function App() {
           filtersPanelLabel="Watchlist filters"
           filtersTitle="Refine watchlist"
           isBootstrapping={isBootstrapping}
+          onRequestBuyNow={handleRequestBuyNow}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Watchlist"
+          purchasedVehicleIds={purchasedVehicleIds}
           refreshToken={watchlistRefreshToken}
           searchEndpoint={`${API_BASE_URL}/api/users/1/watching/vehicles/search`}
           watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
@@ -281,9 +311,11 @@ export default function App() {
           filtersPanelLabel="Search filters"
           filtersTitle="Refine inventory"
           isBootstrapping={isBootstrapping}
+          onRequestBuyNow={handleRequestBuyNow}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Live search results"
+          purchasedVehicleIds={purchasedVehicleIds}
           refreshToken={watchlistRefreshToken}
           searchEndpoint={`${API_BASE_URL}/api/vehicles/search`}
           watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
@@ -299,13 +331,23 @@ export default function App() {
       {selectedVehicleId ? (
         <VehicleDetailsModal
           errorMessage={vehicleDetailsErrorMessage}
+          isPurchased={Boolean(selectedVehicle && purchasedVehicleIds[selectedVehicle.id])}
           isLoading={isVehicleDetailsLoading}
           isWatchPending={isVehicleDetailsWatchPending}
+          onBuyNow={handleRequestBuyNow}
           onClose={closeVehicleDetails}
           onOpenImage={setSelectedImageUrl}
           onToggleWatch={handleVehicleDetailsWatchToggle}
           vehicle={selectedVehicle}
           watchErrorMessage={vehicleDetailsWatchErrorMessage}
+        />
+      ) : null}
+
+      {buyNowVehicle ? (
+        <BuyNowConfirmationModal
+          onCancel={() => setBuyNowVehicle(null)}
+          onConfirm={handleConfirmBuyNow}
+          vehicle={buyNowVehicle}
         />
       ) : null}
 

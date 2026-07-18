@@ -63,9 +63,11 @@ export default function InventorySection({
   filtersPanelLabel,
   filtersTitle,
   isBootstrapping,
+  onRequestBuyNow,
   onWatchStateChanged,
   onSelectVehicle,
   panelLabel,
+  purchasedVehicleIds = {},
   refreshToken = 0,
   searchEndpoint,
   sectionTitle,
@@ -459,11 +461,13 @@ export default function InventorySection({
       isBootstrapping={isBootstrapping}
       isInitialLoading={isInitialLoading}
       isLoadingMore={isLoadingMore}
+      onRequestBuyNow={onRequestBuyNow}
       onSelectVehicle={onSelectVehicle}
       onSortChange={setSortOptionId}
       onToggleWatch={handleToggleWatch}
       onToggleFilters={() => setFiltersOpen((currentOpen) => !currentOpen)}
       panelLabel={panelLabel}
+      purchasedVehicleIds={purchasedVehicleIds}
       pendingWatchVehicleIds={pendingWatchVehicleIds}
       resultsSentinelRef={resultsSentinelRef}
       sortLabel={sortLabel}

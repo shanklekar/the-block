@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Path, Query, Request
@@ -26,6 +26,8 @@ from .schemas import (
     FilterRule,
     DatetimeMetadata,
     NumericMetadata,
+    PurchaseMutationRequest,
+    PurchaseMutationResponse,
     SortDirection,
     SortField,
     VehicleDetailResponse,
@@ -42,7 +44,7 @@ from .schemas import (
 app = FastAPI(
     title="The Block API",
     version="1.0.0",
-    description="Read-only vehicle inventory API backed by SQLite.",
+    description="Vehicle inventory API backed by SQLite.",
 )
 
 app.add_middleware(
@@ -236,6 +238,17 @@ def _vehicle_exists(connection: sqlite3.Connection, vehicle_id: str) -> bool:
         [vehicle_id],
     ).fetchone()
     return row is not None
+
+
+def _get_vehicle_buy_now_price(
+    connection: sqlite3.Connection,
+    vehicle_id: str,
+) -> float | None:
+    row = connection.execute(
+        "SELECT buy_now_price FROM vehicles WHERE id = ? LIMIT 1",
+        [vehicle_id],
+    ).fetchone()
+    return None if row is None else row["buy_now_price"]
 
 
 def _build_is_watched_select(user_id: int | None) -> tuple[str, list[Any]]:
@@ -559,6 +572,105 @@ def mutate_watching(
         user_id=user_id,
         vehicle_id=payload.vehicle_id,
         is_watched=is_watched,
+    )
+
+
+@app.post(
+    "/api/users/{user_id}/purchased",
+    response_model=PurchaseMutationResponse,
+)
+def mutate_purchased(
+    payload: PurchaseMutationRequest,
+    user_id: int = Path(..., ge=0),
+) -> PurchaseMutationResponse:
+    purchase_date = datetime.now().isoformat(timespec="seconds")
+
+    with get_connection() as connection:
+        if not _user_exists(connection, user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if not _vehicle_exists(connection, payload.vehicle_id):
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+
+        vehicle_buy_now_price = _get_vehicle_buy_now_price(connection, payload.vehicle_id)
+        if (
+            vehicle_buy_now_price is None
+            or vehicle_buy_now_price <= 0
+            or payload.buy_now_price != vehicle_buy_now_price
+        ):
+            raise HTTPException(status_code=409, detail="Buy now price does not match")
+
+        existing_purchase = connection.execute(
+            """
+            SELECT user_id, vehicle_id, purchase_date, purchase_amount
+            FROM purchased
+            WHERE vehicle_id = ?
+            LIMIT 1
+            """,
+            [payload.vehicle_id],
+        ).fetchone()
+
+        if existing_purchase is not None:
+            if existing_purchase["user_id"] != user_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Vehicle has already been purchased by another user",
+                )
+
+            return PurchaseMutationResponse(
+                user_id=existing_purchase["user_id"],
+                vehicle_id=existing_purchase["vehicle_id"],
+                purchase_amount=existing_purchase["purchase_amount"],
+                purchase_date=existing_purchase["purchase_date"],
+                is_purchased=True,
+            )
+
+        try:
+            connection.execute(
+                """
+                INSERT INTO purchased (
+                    user_id,
+                    vehicle_id,
+                    purchase_date,
+                    purchase_amount
+                ) VALUES (?, ?, ?, ?)
+                """,
+                [user_id, payload.vehicle_id, purchase_date, payload.buy_now_price],
+            )
+            connection.commit()
+        except sqlite3.IntegrityError:
+            # A unique vehicle_id constraint protects against duplicate purchases.
+            existing_purchase = connection.execute(
+                """
+                SELECT user_id, vehicle_id, purchase_date, purchase_amount
+                FROM purchased
+                WHERE vehicle_id = ?
+                LIMIT 1
+                """,
+                [payload.vehicle_id],
+            ).fetchone()
+            if existing_purchase is None:
+                raise
+            if existing_purchase["user_id"] != user_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Vehicle has already been purchased by another user",
+                )
+
+            return PurchaseMutationResponse(
+                user_id=existing_purchase["user_id"],
+                vehicle_id=existing_purchase["vehicle_id"],
+                purchase_amount=existing_purchase["purchase_amount"],
+                purchase_date=existing_purchase["purchase_date"],
+                is_purchased=True,
+            )
+
+    return PurchaseMutationResponse(
+        user_id=user_id,
+        vehicle_id=payload.vehicle_id,
+        purchase_amount=payload.buy_now_price,
+        purchase_date=purchase_date,
+        is_purchased=True,
     )
 
 

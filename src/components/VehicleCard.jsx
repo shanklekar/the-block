@@ -4,9 +4,12 @@ import {
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
+import BuyNowButton from "./BuyNowButton";
 import WatchToggleButton from "./WatchToggleButton";
 
 export default function VehicleCard({
+  isPurchased = false,
+  onBuyNow,
   onSelect,
   onToggleWatch,
   showWatchToggle = false,
@@ -24,6 +27,7 @@ export default function VehicleCard({
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
     : `Add ${vehicleTitle} to watchlist`;
+  const canBuyNow = Number(vehicle.buy_now_price) > 0;
 
   return (
     <article
@@ -88,6 +92,23 @@ export default function VehicleCard({
             <dd>{formatAuctionDate(vehicle.auction_start)}</dd>
           </div>
         </dl>
+
+        {canBuyNow ? (
+          <div
+            className="vehicle-card-buy-now"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <BuyNowButton
+              isPurchased={isPurchased}
+              price={vehicle.buy_now_price}
+              onClick={(event) => {
+                event.stopPropagation();
+                onBuyNow?.(vehicle);
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </article>
   );

@@ -166,6 +166,7 @@ The API will start on `http://127.0.0.1:8000`.
 - `GET /api/vehicles/filters/schema`
 - `POST /api/vehicles/search`
 - `POST /api/users/{user_id}/watching/vehicles/search`
+- `POST /api/users/{user_id}/purchased`
 - `GET /api/vehicles/{vehicle_id}`
 
 ### Search request format
@@ -210,3 +211,5 @@ The backend does not trust incoming requests:
 - Result counts are capped to prevent oversized queries.
 
 `POST /api/users/{user_id}/watching/vehicles/search` accepts the same request body and returns the same paginated response shape as `POST /api/vehicles/search`, but limits results to vehicles present in the `watching` table for the provided `user_id`.
+
+`POST /api/users/{user_id}/purchased` accepts a JSON body with `vehicle_id` and `buy_now_price`. The API stamps `purchase_date` when the request is handled, rejects price mismatches, rejects purchases already completed by another user, and returns success without creating a duplicate row if the same user retries the same purchase.

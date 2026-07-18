@@ -4,6 +4,7 @@ import {
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
+import BuyNowButton from "./BuyNowButton";
 import WatchToggleButton from "./WatchToggleButton";
 
 function DetailItem({ label, value }) {
@@ -26,8 +27,10 @@ function DetailSection({ title, children }) {
 
 export default function VehicleDetailsModal({
   errorMessage,
+  isPurchased = false,
   isLoading,
   isWatchPending = false,
+  onBuyNow,
   onClose,
   onOpenImage,
   onToggleWatch,
@@ -45,6 +48,7 @@ export default function VehicleDetailsModal({
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
     : `Add ${vehicleTitle} to watchlist`;
+  const canBuyNow = Number(vehicle?.buy_now_price) > 0;
 
   return (
     <div className="modal-shell vehicle-detail-shell" role="dialog" aria-modal="true">
@@ -93,44 +97,55 @@ export default function VehicleDetailsModal({
                 </button>
               ) : null}
 
-              <div className="vehicle-detail-summary">
-                <div className="vehicle-detail-summary-primary">
-                  <div className="vehicle-detail-summary-pills">
-                    <span>{formatMilesFromKm(vehicle.odometer_km)}</span>
-                  </div>
-                  <div className="vehicle-detail-summary-actions">
-                    <WatchToggleButton
-                      className="vehicle-watch-toggle-detail"
-                      disabled={isWatchPending}
-                      isWatched={isWatched}
-                      label={watchToggleLabel}
-                      onToggle={onToggleWatch}
-                    />
-                  </div>
-                </div>
-                <dl className="vehicle-detail-summary-stats">
-                  <div>
-                    <dt>Current bid</dt>
-                    <dd>{formatCurrency(summaryPrice)}</dd>
-                  </div>
-                  <div>
-                    <dt>Auction</dt>
-                    <dd>{formatAuctionDate(vehicle.auction_start)}</dd>
-                  </div>
-                  <div>
-                    <dt>Starting bid</dt>
-                    <dd>{formatCurrency(vehicle.starting_bid)}</dd>
-                  </div>
-                  <div>
-                    <dt>Bid count</dt>
-                    <dd>{vehicle.bid_count.toLocaleString()}</dd>
-                  </div>
-                </dl>
-                {watchErrorMessage ? (
-                  <div className="vehicle-detail-inline-message" role="status">
-                    {watchErrorMessage}
-                  </div>
+              <div className="vehicle-detail-summary-stack">
+                {canBuyNow ? (
+                  <BuyNowButton
+                    className="vehicle-buy-now-detail"
+                    isPurchased={isPurchased}
+                    price={vehicle.buy_now_price}
+                    onClick={() => onBuyNow?.(vehicle)}
+                  />
                 ) : null}
+
+                <div className="vehicle-detail-summary">
+                  <div className="vehicle-detail-summary-primary">
+                    <div className="vehicle-detail-summary-pills">
+                      <span>{formatMilesFromKm(vehicle.odometer_km)}</span>
+                    </div>
+                    <div className="vehicle-detail-summary-actions">
+                      <WatchToggleButton
+                        className="vehicle-watch-toggle-detail"
+                        disabled={isWatchPending}
+                        isWatched={isWatched}
+                        label={watchToggleLabel}
+                        onToggle={onToggleWatch}
+                      />
+                    </div>
+                  </div>
+                  <dl className="vehicle-detail-summary-stats">
+                    <div>
+                      <dt>Current bid</dt>
+                      <dd>{formatCurrency(summaryPrice)}</dd>
+                    </div>
+                    <div>
+                      <dt>Auction</dt>
+                      <dd>{formatAuctionDate(vehicle.auction_start)}</dd>
+                    </div>
+                    <div>
+                      <dt>Starting bid</dt>
+                      <dd>{formatCurrency(vehicle.starting_bid)}</dd>
+                    </div>
+                    <div>
+                      <dt>Bid count</dt>
+                      <dd>{vehicle.bid_count.toLocaleString()}</dd>
+                    </div>
+                  </dl>
+                  {watchErrorMessage ? (
+                    <div className="vehicle-detail-inline-message" role="status">
+                      {watchErrorMessage}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </section>
 

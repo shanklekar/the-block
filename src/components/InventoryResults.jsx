@@ -30,11 +30,13 @@ export default function InventoryResults({
   isBootstrapping,
   isInitialLoading,
   isLoadingMore,
+  onRequestBuyNow,
   onSelectVehicle,
   onSortChange,
   onToggleWatch,
   onToggleFilters,
   panelLabel = "Live search results",
+  purchasedVehicleIds = {},
   pendingWatchVehicleIds = [],
   resultsSentinelRef,
   sortLabel = "Sort by",
@@ -107,7 +109,9 @@ export default function InventoryResults({
         <div className="vehicle-grid">
           {vehicles.map((vehicle) => (
             <VehicleCard
+              isPurchased={Boolean(purchasedVehicleIds[vehicle.id])}
               key={vehicle.id}
+              onBuyNow={onRequestBuyNow}
               onSelect={onSelectVehicle}
               onToggleWatch={onToggleWatch}
               showWatchToggle={watchToggleEnabled}
