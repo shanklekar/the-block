@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from .database import get_connection, serialize_vehicle
 from .schemas import (
@@ -14,7 +18,10 @@ from .schemas import (
     FilterCriteria,
     FilterOperator,
     FilterRule,
+    DatetimeMetadata,
+    NumericMetadata,
     VehicleResponse,
+    VehicleFilterMetadataResponse,
     VehicleSearchRequest,
     VehicleSearchResponse,
 )
@@ -33,6 +40,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger("the_block.api")
+
+
+FILTER_METADATA_FIELDS = {
+    "categorical": [
+        "id",
+        "vin",
+        "make",
+        "model",
+        "trim",
+        "body_style",
+        "exterior_color",
+        "interior_color",
+        "engine",
+        "transmission",
+        "drivetrain",
+        "fuel_type",
+        "condition_report",
+        "title_status",
+        "province",
+        "city",
+        "selling_dealership",
+        "lot",
+    ],
+    "numeric": sorted(NUMERIC_FIELDS),
+    "datetime": sorted(DATETIME_FIELDS),
+}
 
 
 OPERATOR_SQL = {
@@ -90,6 +128,56 @@ def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
 
     joiner = " AND " if criteria.match.value == "and" else " OR "
     return f"WHERE {joiner.join(clauses)}", parameters
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    logger.warning(
+        "Validation error for %s %s: %s",
+        request.method,
+        request.url.path,
+        exc.errors(),
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": jsonable_encoder(exc.errors())},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    if exc.status_code >= 400:
+        logger.warning(
+            "HTTP error for %s %s: %s",
+            request.method,
+            request.url.path,
+            exc.detail,
+        )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(sqlite3.Error)
+async def sqlite_exception_handler(request: Request, exc: sqlite3.Error) -> JSONResponse:
+    logger.exception(
+        "Database error while handling %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception(
+        "Unhandled error while handling %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/health")
@@ -159,6 +247,45 @@ def get_filter_schema() -> dict[str, Any]:
     }
 
 
+@app.get(
+    "/api/vehicles/filters/metadata",
+    response_model=VehicleFilterMetadataResponse,
+)
+def get_filter_metadata() -> VehicleFilterMetadataResponse:
+    categorical: dict[str, list[str]] = {}
+    numeric: dict[str, NumericMetadata] = {}
+    datetime: dict[str, DatetimeMetadata] = {}
+
+    with get_connection() as connection:
+        for field in FILTER_METADATA_FIELDS["categorical"]:
+            query = f"""
+                SELECT DISTINCT {field}
+                FROM vehicles
+                WHERE {field} IS NOT NULL AND TRIM(CAST({field} AS TEXT)) != ''
+                ORDER BY {field} ASC
+            """
+            rows = connection.execute(query).fetchall()
+            categorical[field] = [str(row[0]) for row in rows]
+
+        for field in FILTER_METADATA_FIELDS["numeric"]:
+            row = connection.execute(
+                f"SELECT MIN({field}) AS minimum, MAX({field}) AS maximum FROM vehicles"
+            ).fetchone()
+            numeric[field] = NumericMetadata(min=row["minimum"], max=row["maximum"])
+
+        for field in FILTER_METADATA_FIELDS["datetime"]:
+            row = connection.execute(
+                f"SELECT MIN({field}) AS minimum, MAX({field}) AS maximum FROM vehicles"
+            ).fetchone()
+            datetime[field] = DatetimeMetadata(min=row["minimum"], max=row["maximum"])
+
+    return VehicleFilterMetadataResponse(
+        categorical=categorical,
+        numeric=numeric,
+        datetime=datetime,
+    )
+
+
 @app.post("/api/vehicles/search", response_model=VehicleSearchResponse)
 def search_vehicles(payload: VehicleSearchRequest) -> VehicleSearchResponse:
     where_clause, parameters = build_where_clause(payload.criteria)
@@ -168,15 +295,27 @@ def search_vehicles(payload: VehicleSearchRequest) -> VehicleSearchResponse:
         {where_clause}
         ORDER BY auction_start ASC, year DESC, make ASC, model ASC
         LIMIT ?
+        OFFSET ?
+    """
+    count_query = f"""
+        SELECT COUNT(*) AS total
+        FROM vehicles
+        {where_clause}
     """
 
     with get_connection() as connection:
-        rows = connection.execute(query, [*parameters, payload.limit]).fetchall()
+        total_row = connection.execute(count_query, parameters).fetchone()
+        rows = connection.execute(
+            query,
+            [*parameters, payload.limit, payload.offset],
+        ).fetchall()
 
     vehicles = [VehicleResponse(**serialize_vehicle(row)) for row in rows]
     return VehicleSearchResponse(
         count=len(vehicles),
         limit=payload.limit,
+        offset=payload.offset,
+        total=total_row["total"] if total_row is not None else 0,
         vehicles=vehicles,
     )
 

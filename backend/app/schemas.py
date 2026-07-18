@@ -240,6 +240,7 @@ class VehicleSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     limit: int = Field(default=25, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
     criteria: FilterCriteria = Field(default_factory=FilterCriteria)
 
 
@@ -282,4 +283,28 @@ class VehicleSearchResponse(BaseModel):
 
     count: int
     limit: int
+    offset: int
+    total: int
     vehicles: list[VehicleResponse]
+
+
+class NumericMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min: float | None = None
+    max: float | None = None
+
+
+class DatetimeMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min: str | None = None
+    max: str | None = None
+
+
+class VehicleFilterMetadataResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    categorical: dict[str, list[str]]
+    numeric: dict[str, NumericMetadata]
+    datetime: dict[str, DatetimeMetadata]
