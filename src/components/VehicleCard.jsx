@@ -1,12 +1,12 @@
+import { useEffect, useRef } from "react";
 import {
   formatAuctionDate,
   formatConditionGrade,
-  formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
 import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
-import BidNowButton from "./BidNowButton";
 import BuyNowButton from "./BuyNowButton";
+import VehicleBidPanel from "./VehicleBidPanel";
 import WatchToggleButton from "./WatchToggleButton";
 
 function getTitleStatusBadgeClassName(titleStatus) {
@@ -25,20 +25,22 @@ function getTitleStatusBadgeClassName(titleStatus) {
 
 export default function VehicleCard({
   apiBaseUrl = "",
-  bidActionMode = "active-only",
   currentUserId = null,
   isPurchased = false,
+  onBidPlaced,
   onBuyNow,
-  onRequestBid,
   onSelect,
   onToggleWatch,
+  onVehicleLiveStateChange,
   showWatchToggle = false,
   vehicle,
   watchTogglePending = false,
 }) {
-  const { biddingState, canBid, liveVehicle } = useVehicleLiveBidding({
+  const lastVehicleStateRef = useRef(null);
+  const { biddingState, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
     apiBaseUrl,
-    enabled: bidActionMode === "active-only",
+    enabled: Boolean(vehicle?.id),
+    fetchInitialState: true,
     userId: currentUserId,
     vehicle,
   });
@@ -63,14 +65,42 @@ export default function VehicleCard({
   const vehicleIsSold = Boolean(displayVehicle.is_purchased);
   const showBuyNowButton =
     Number(displayVehicle.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
-  const minimumNextBid = biddingState?.minimum_next_bid ?? null;
-  const showActiveBidButton =
-    bidActionMode === "active-only" &&
-    canBid &&
-    !vehicleIsSold &&
-    !vehicleIsPurchased &&
-    minimumNextBid;
+  const showBidPanel = Boolean(biddingState?.auction_started);
   const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
+
+  useEffect(() => {
+    if (!onVehicleLiveStateChange || !displayVehicle?.id) {
+      return;
+    }
+
+    const nextVehicleState = {
+      bid_count: displayVehicle.bid_count,
+      current_bid: displayVehicle.current_bid,
+      is_purchased: Boolean(displayVehicle.is_purchased),
+      starting_bid: displayVehicle.starting_bid,
+    };
+    const previousVehicleState = lastVehicleStateRef.current;
+
+    if (
+      previousVehicleState &&
+      previousVehicleState.bid_count === nextVehicleState.bid_count &&
+      previousVehicleState.current_bid === nextVehicleState.current_bid &&
+      previousVehicleState.is_purchased === nextVehicleState.is_purchased &&
+      previousVehicleState.starting_bid === nextVehicleState.starting_bid
+    ) {
+      return;
+    }
+
+    lastVehicleStateRef.current = nextVehicleState;
+    onVehicleLiveStateChange(displayVehicle.id, nextVehicleState);
+  }, [
+    displayVehicle?.bid_count,
+    displayVehicle?.current_bid,
+    displayVehicle?.id,
+    displayVehicle?.is_purchased,
+    displayVehicle?.starting_bid,
+    onVehicleLiveStateChange,
+  ]);
 
   return (
     <article
@@ -130,7 +160,7 @@ export default function VehicleCard({
           </div>
         </dl>
 
-        {showActiveBidButton || showBuyNowButton ? (
+        {showBuyNowButton ? (
           <div className="vehicle-card-actions">
             {showBuyNowButton ? (
               <div
@@ -148,22 +178,24 @@ export default function VehicleCard({
                 />
               </div>
             ) : null}
+          </div>
+        ) : null}
 
-            {showActiveBidButton ? (
-              <div
-                className="vehicle-card-bid-now"
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                <BidNowButton
-                  amount={minimumNextBid}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRequestBid?.(displayVehicle);
-                  }}
-                />
-              </div>
-            ) : null}
+        {showBidPanel ? (
+          <div
+            className="vehicle-card-bid-panel"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <VehicleBidPanel
+              apiBaseUrl={apiBaseUrl}
+              biddingState={biddingState}
+              displayVehicle={displayVehicle}
+              isPurchased={vehicleIsPurchased}
+              onBidPlaced={onBidPlaced}
+              stateErrorMessage={stateErrorMessage}
+              userId={currentUserId}
+            />
           </div>
         ) : null}
       </div>

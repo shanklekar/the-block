@@ -232,16 +232,31 @@ def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
     return f"WHERE {joiner.join(clauses)}", parameters
 
 
-def build_order_clause(sort_by: SortField, sort_direction: SortDirection) -> str:
+def build_order_clause(
+    sort_by: SortField,
+    sort_direction: SortDirection,
+    *,
+    group_purchased_last: bool = False,
+) -> str:
     sort_expression = SORT_SQL_FIELDS[sort_by]
     direction = "ASC" if sort_direction == SortDirection.ASC else "DESC"
+    order_fields: list[str] = []
 
-    return (
-        "ORDER BY "
-        f"CASE WHEN {sort_expression} IS NULL THEN 1 ELSE 0 END ASC, "
-        f"{sort_expression} {direction}, "
-        "year DESC, make ASC, model ASC, id ASC"
+    if group_purchased_last:
+        order_fields.append("CASE WHEN is_purchased THEN 1 ELSE 0 END ASC")
+
+    order_fields.extend(
+        [
+            f"CASE WHEN {sort_expression} IS NULL THEN 1 ELSE 0 END ASC",
+            f"{sort_expression} {direction}",
+            "year DESC",
+            "make ASC",
+            "model ASC",
+            "id ASC",
+        ]
     )
+
+    return f"ORDER BY {', '.join(order_fields)}"
 
 
 def _combine_where_clauses(*clauses: tuple[str, list[Any]]) -> tuple[str, list[Any]]:
@@ -474,6 +489,7 @@ def _build_vehicle_search_response(
     payload: VehicleSearchRequest,
     *,
     extra_clause: tuple[str, list[Any]] | None = None,
+    group_purchased_last: bool = False,
 ) -> VehicleSearchResponse:
     with get_connection() as connection:
         if payload.user_id is not None and not _user_exists(connection, payload.user_id):
@@ -489,7 +505,11 @@ def _build_vehicle_search_response(
             extra_clause or ("", []),
             criteria_clause,
         )
-        order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
+        order_clause = build_order_clause(
+            payload.sort_by,
+            payload.sort_direction,
+            group_purchased_last=group_purchased_last,
+        )
         watch_select, watch_parameters = _build_is_watched_select(payload.user_id)
         purchase_select = _build_is_purchased_select()
         purchased_by_user_select, purchased_by_user_parameters = (
@@ -732,6 +752,7 @@ def search_watched_vehicles(
             """,
             [user_id],
         ),
+        group_purchased_last=True,
     )
 
 

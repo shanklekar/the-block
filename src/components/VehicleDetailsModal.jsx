@@ -5,8 +5,8 @@ import {
   formatMilesFromKm,
 } from "../inventoryConfig";
 import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
-import BidNowButton from "./BidNowButton";
 import BuyNowButton from "./BuyNowButton";
+import VehicleBidPanel from "./VehicleBidPanel";
 import WatchToggleButton from "./WatchToggleButton";
 
 function getTitleStatusBadgeClassName(titleStatus) {
@@ -47,17 +47,17 @@ export default function VehicleDetailsModal({
   errorMessage,
   isPurchased = false,
   isLoading,
+  onBidPlaced,
   purchaseMessage = "",
   isWatchPending = false,
   onBuyNow,
-  onRequestBid,
   onClose,
   onOpenImage,
   onToggleWatch,
   vehicle,
   watchErrorMessage = "",
 }) {
-  const { biddingState, canBid, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
+  const { biddingState, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
     apiBaseUrl,
     enabled: Boolean(vehicle),
     fetchInitialState: true,
@@ -80,12 +80,7 @@ export default function VehicleDetailsModal({
   const vehicleIsSold = Boolean(displayVehicle?.is_purchased || biddingState?.is_sold);
   const showBuyNowButton =
     Number(displayVehicle?.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
-  const minimumNextBid = biddingState?.minimum_next_bid ?? null;
-  const bidStatusMessage = biddingState && !biddingState.auction_started
-    ? "Auction has not started yet."
-    : vehicleIsSold
-      ? "This vehicle has already been sold."
-      : "";
+  const showBidPanel = Boolean(biddingState?.auction_started);
   const titleStatusBadgeClassName = getTitleStatusBadgeClassName(
     displayVehicle?.title_status,
   );
@@ -141,14 +136,6 @@ export default function VehicleDetailsModal({
 
               <div className="vehicle-detail-summary-stack">
                 <div className="vehicle-detail-action-stack">
-                  {canBid && minimumNextBid && !vehicleIsSold ? (
-                    <BidNowButton
-                      amount={minimumNextBid}
-                      className="vehicle-bid-now-detail"
-                      onClick={() => onRequestBid?.(displayVehicle)}
-                    />
-                  ) : null}
-
                   {showBuyNowButton ? (
                     <BuyNowButton
                       className="vehicle-buy-now-detail"
@@ -197,14 +184,9 @@ export default function VehicleDetailsModal({
                       {watchErrorMessage}
                     </div>
                   ) : null}
-                  {stateErrorMessage ? (
+                  {!showBidPanel && stateErrorMessage ? (
                     <div className="vehicle-detail-inline-message" role="status">
                       {stateErrorMessage}
-                    </div>
-                  ) : null}
-                  {bidStatusMessage ? (
-                    <div className="vehicle-detail-inline-message" role="status">
-                      {bidStatusMessage}
                     </div>
                   ) : null}
                   {purchaseMessage ? (
@@ -213,6 +195,19 @@ export default function VehicleDetailsModal({
                     </div>
                   ) : null}
                 </div>
+
+                {showBidPanel ? (
+                  <VehicleBidPanel
+                    apiBaseUrl={apiBaseUrl}
+                    biddingState={biddingState}
+                    displayVehicle={displayVehicle}
+                    isPurchased={vehicleIsPurchased}
+                    onBidPlaced={onBidPlaced}
+                    stateErrorMessage={stateErrorMessage}
+                    userId={currentUserId}
+                    variant="detail"
+                  />
+                ) : null}
               </div>
             </section>
 

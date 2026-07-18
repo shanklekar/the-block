@@ -57,9 +57,30 @@ function filterHiddenVehicles(vehicles, hiddenVehicleIds) {
   return vehicles.filter((vehicle) => !hiddenVehicleIds[vehicle.id]);
 }
 
+function shouldTreatVehicleAsPurchased(vehicle, purchasedVehicleIds) {
+  return Boolean(
+    vehicle?.is_purchased || vehicle?.is_purchased_by_user || purchasedVehicleIds[vehicle?.id],
+  );
+}
+
+function partitionPurchasedVehiclesLast(vehicles, purchasedVehicleIds) {
+  const activeVehicles = [];
+  const purchasedVehicles = [];
+
+  for (const vehicle of vehicles) {
+    if (shouldTreatVehicleAsPurchased(vehicle, purchasedVehicleIds)) {
+      purchasedVehicles.push(vehicle);
+      continue;
+    }
+
+    activeVehicles.push(vehicle);
+  }
+
+  return [...activeVehicles, ...purchasedVehicles];
+}
+
 export default function InventorySection({
   apiBaseUrl = "",
-  bidActionMode = "active-only",
   bootstrapErrorMessage,
   currentUserId = null,
   enableWatchToggle = false,
@@ -69,6 +90,8 @@ export default function InventorySection({
   filtersPanelLabel,
   filtersTitle,
   isBootstrapping,
+  keepPurchasedLast = false,
+  onBidPlaced,
   onRequestBuyNow,
   onWatchStateChanged,
   onSelectVehicle,
@@ -81,7 +104,6 @@ export default function InventorySection({
   emptyStateMessage,
   hiddenVehicleIds = {},
   watchMutationEndpoint = "",
-  onRequestBid,
 }) {
   const [filters, setFilters] = useState(createDefaultFilters);
   const [vehicles, setVehicles] = useState([]);
@@ -124,6 +146,17 @@ export default function InventorySection({
   const displayErrorMessage = errorMessage || bootstrapErrorMessage;
   const shouldIncludeWatchState = enableWatchToggle && currentUserId !== null;
   const hiddenVehicleIdsKey = JSON.stringify(Object.keys(hiddenVehicleIds).sort());
+  const purchasedVehicleIdsKey = JSON.stringify(Object.keys(purchasedVehicleIds).sort());
+
+  function prepareVehiclesForDisplay(nextVehicles) {
+    const visibleVehicles = filterHiddenVehicles(nextVehicles, hiddenVehicleIds);
+
+    if (!keepPurchasedLast) {
+      return visibleVehicles;
+    }
+
+    return partitionPurchasedVehiclesLast(visibleVehicles, purchasedVehicleIds);
+  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -146,8 +179,16 @@ export default function InventorySection({
       return;
     }
 
-    setVehicles((currentVehicles) => filterHiddenVehicles(currentVehicles, hiddenVehicleIds));
+    setVehicles((currentVehicles) => prepareVehiclesForDisplay(currentVehicles));
   }, [hiddenVehicleIds, hiddenVehicleIdsKey]);
+
+  useEffect(() => {
+    if (!keepPurchasedLast) {
+      return;
+    }
+
+    setVehicles((currentVehicles) => prepareVehiclesForDisplay(currentVehicles));
+  }, [keepPurchasedLast, purchasedVehicleIdsKey]);
 
   function buildSearchPayload({ criteria, limit, offset, sortDirection, sortBy }) {
     return {
@@ -214,7 +255,7 @@ export default function InventorySection({
           return;
         }
 
-        setVehicles(filterHiddenVehicles(payload.vehicles, hiddenVehicleIds));
+        setVehicles(prepareVehiclesForDisplay(payload.vehicles));
         setTotalVehicles(payload.total);
         setHasMore(payload.offset + payload.count < payload.total);
       } catch (error) {
@@ -329,10 +370,7 @@ export default function InventorySection({
       }
 
       setVehicles((currentVehicles) =>
-        mergeVehicles(
-          currentVehicles,
-          filterHiddenVehicles(payload.vehicles, hiddenVehicleIds),
-        ),
+        prepareVehiclesForDisplay(mergeVehicles(currentVehicles, payload.vehicles)),
       );
       setTotalVehicles(payload.total);
       setHasMore(payload.offset + payload.count < payload.total);
@@ -396,6 +434,42 @@ export default function InventorySection({
     }
   }
 
+  function handleVehicleLiveStateChange(vehicleId, nextVehicleState) {
+    if (!keepPurchasedLast) {
+      return;
+    }
+
+    setVehicles((currentVehicles) => {
+      let didChange = false;
+      const nextVehicles = currentVehicles.map((vehicle) => {
+        if (vehicle.id !== vehicleId) {
+          return vehicle;
+        }
+
+        if (
+          vehicle.bid_count === nextVehicleState.bid_count &&
+          vehicle.current_bid === nextVehicleState.current_bid &&
+          vehicle.is_purchased === nextVehicleState.is_purchased &&
+          vehicle.starting_bid === nextVehicleState.starting_bid
+        ) {
+          return vehicle;
+        }
+
+        didChange = true;
+        return {
+          ...vehicle,
+          ...nextVehicleState,
+        };
+      });
+
+      if (!didChange) {
+        return currentVehicles;
+      }
+
+      return prepareVehiclesForDisplay(nextVehicles);
+    });
+  }
+
   function updateTextFilter(field, value) {
     setFilters((currentFilters) => ({
       ...currentFilters,
@@ -457,7 +531,6 @@ export default function InventorySection({
     <InventoryResults
       apiBaseUrl={apiBaseUrl}
       activeFilterCount={activeFilterCount}
-      bidActionMode={bidActionMode}
       currentUserId={currentUserId}
       emptyStateMessage={emptyStateMessage}
       errorMessage={displayErrorMessage}
@@ -486,12 +559,13 @@ export default function InventorySection({
       isBootstrapping={isBootstrapping}
       isInitialLoading={isInitialLoading}
       isLoadingMore={isLoadingMore}
+      onBidPlaced={onBidPlaced}
       onRequestBuyNow={onRequestBuyNow}
-      onRequestBid={onRequestBid}
       onSelectVehicle={onSelectVehicle}
       onSortChange={setSortOptionId}
       onToggleWatch={handleToggleWatch}
       onToggleFilters={() => setFiltersOpen((currentOpen) => !currentOpen)}
+      onVehicleLiveStateChange={keepPurchasedLast ? handleVehicleLiveStateChange : undefined}
       panelLabel={panelLabel}
       purchasedVehicleIds={purchasedVehicleIds}
       pendingWatchVehicleIds={pendingWatchVehicleIds}

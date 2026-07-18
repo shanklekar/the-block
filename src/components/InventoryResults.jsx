@@ -22,7 +22,6 @@ function LoadingCards() {
 export default function InventoryResults({
   apiBaseUrl = "",
   activeFilterCount,
-  bidActionMode = "active-only",
   currentUserId = null,
   emptyStateMessage = "No vehicles match your criteria.",
   errorMessage,
@@ -33,12 +32,13 @@ export default function InventoryResults({
   isBootstrapping,
   isInitialLoading,
   isLoadingMore,
+  onBidPlaced,
   onRequestBuyNow,
-  onRequestBid,
   onSelectVehicle,
   onSortChange,
   onToggleWatch,
   onToggleFilters,
+  onVehicleLiveStateChange,
   panelLabel = "Live search results",
   purchasedVehicleIds = {},
   pendingWatchVehicleIds = [],
@@ -114,16 +114,16 @@ export default function InventoryResults({
           {vehicles.map((vehicle) => (
             <VehicleCard
               apiBaseUrl={apiBaseUrl}
-              bidActionMode={bidActionMode}
               currentUserId={currentUserId}
               isPurchased={Boolean(
                 vehicle.is_purchased_by_user || purchasedVehicleIds[vehicle.id],
               )}
               key={vehicle.id}
+              onBidPlaced={onBidPlaced}
               onBuyNow={onRequestBuyNow}
-              onRequestBid={onRequestBid}
               onSelect={onSelectVehicle}
               onToggleWatch={onToggleWatch}
+              onVehicleLiveStateChange={onVehicleLiveStateChange}
               showWatchToggle={watchToggleEnabled}
               watchTogglePending={pendingWatchVehicleIds.includes(vehicle.id)}
               vehicle={vehicle}

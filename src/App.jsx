@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { formatCurrency } from "./inventoryConfig";
-import BidNowModal from "./components/BidNowModal";
 import BuyNowConfirmationModal from "./components/BuyNowConfirmationModal";
 import InventorySection from "./components/InventorySection";
 import OpenlaneLogo from "./components/OpenlaneLogo";
@@ -28,7 +27,6 @@ export default function App() {
   const [isVehicleDetailsWatchPending, setIsVehicleDetailsWatchPending] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
   const [buyNowVehicle, setBuyNowVehicle] = useState(null);
-  const [bidVehicle, setBidVehicle] = useState(null);
   const [isBuyNowPending, setIsBuyNowPending] = useState(false);
   const [purchaseFeedbackMessage, setPurchaseFeedbackMessage] = useState("");
   const [purchaseFeedbackTone, setPurchaseFeedbackTone] = useState("info");
@@ -142,7 +140,7 @@ export default function App() {
   }, [selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle && !bidVehicle) {
+    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle) {
       return undefined;
     }
 
@@ -161,11 +159,6 @@ export default function App() {
         return;
       }
 
-      if (bidVehicle) {
-        setBidVehicle(null);
-        return;
-      }
-
       setSelectedVehicleId("");
       setSelectedVehicle(null);
       setVehicleDetailsErrorMessage("");
@@ -176,10 +169,10 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [bidVehicle, buyNowVehicle, selectedImageUrl, selectedVehicleId]);
+  }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle && !bidVehicle) {
+    if (!selectedVehicleId && !selectedImageUrl && !buyNowVehicle) {
       return undefined;
     }
 
@@ -189,7 +182,7 @@ export default function App() {
     return () => {
       document.body.style.overflow = overflow;
     };
-  }, [bidVehicle, buyNowVehicle, selectedImageUrl, selectedVehicleId]);
+  }, [buyNowVehicle, selectedImageUrl, selectedVehicleId]);
 
   function openVehicleDetails(vehicleId) {
     setSelectedImageUrl("");
@@ -225,23 +218,6 @@ export default function App() {
     setBuyNowVehicle(vehicle);
   }
 
-  function handleRequestBid(vehicle) {
-    if (
-      !vehicle ||
-      vehicle.is_purchased ||
-      vehicle.is_purchased_by_user ||
-      purchasedVehicleIds[vehicle.id] ||
-      soldVehicleIds[vehicle.id]
-    ) {
-      return;
-    }
-
-    setPurchaseFeedbackTone("info");
-    setPurchaseFeedbackMessage("");
-    setVehicleDetailsPurchaseMessage("");
-    setBidVehicle(vehicle);
-  }
-
   async function handleConfirmBuyNow() {
     if (!buyNowVehicle || isBuyNowPending) {
       return;
@@ -271,9 +247,6 @@ export default function App() {
           ...currentIds,
           [vehicleId]: true,
         }));
-        if (bidVehicle?.id === vehicleId) {
-          setBidVehicle(null);
-        }
         if (selectedVehicle?.id === vehicleId) {
           setSelectedVehicle((currentVehicle) =>
             currentVehicle
@@ -330,9 +303,6 @@ export default function App() {
           ...currentIds,
           [vehicleId]: true,
         }));
-        if (bidVehicle?.id === vehicleId) {
-          setBidVehicle(null);
-        }
         setInventoryRefreshToken((currentValue) => currentValue + 1);
         setBuyNowVehicle(null);
         if (selectedVehicle?.id === vehicleId) {
@@ -405,6 +375,25 @@ export default function App() {
     }
   }
 
+  function handleBidPlaced(payload) {
+    const successMessage = `Bid placed at ${formatCurrency(payload.current_bid)}.`;
+    setPurchaseFeedbackTone("info");
+    setPurchaseFeedbackMessage(successMessage);
+
+    if (selectedVehicle?.id === payload.vehicle_id) {
+      setVehicleDetailsPurchaseMessage(successMessage);
+      setSelectedVehicle((currentVehicle) =>
+        currentVehicle
+          ? {
+              ...currentVehicle,
+              bid_count: payload.bid_count,
+              current_bid: payload.current_bid,
+            }
+          : currentVehicle,
+      );
+    }
+  }
+
   return (
     <main className="inventory-page">
       <section className="inventory-hero">
@@ -432,7 +421,6 @@ export default function App() {
 
         <InventorySection
           apiBaseUrl={API_BASE_URL}
-          bidActionMode="active-only"
           bootstrapErrorMessage={bootstrapErrorMessage}
           currentUserId={CURRENT_USER_ID}
           emptyStateMessage="No watched vehicles match your criteria."
@@ -444,8 +432,9 @@ export default function App() {
           filtersTitle="Refine watchlist"
           hiddenVehicleIds={soldVehicleIds}
           isBootstrapping={isBootstrapping}
+          keepPurchasedLast
+          onBidPlaced={handleBidPlaced}
           onRequestBuyNow={handleRequestBuyNow}
-          onRequestBid={handleRequestBid}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Watchlist"
@@ -463,7 +452,6 @@ export default function App() {
 
         <InventorySection
           apiBaseUrl={API_BASE_URL}
-          bidActionMode="watch-before-bid"
           bootstrapErrorMessage={bootstrapErrorMessage}
           currentUserId={CURRENT_USER_ID}
           emptyStateMessage="No vehicles match your criteria."
@@ -475,8 +463,8 @@ export default function App() {
           filtersTitle="Refine inventory"
           hiddenVehicleIds={soldVehicleIds}
           isBootstrapping={isBootstrapping}
+          onBidPlaced={handleBidPlaced}
           onRequestBuyNow={handleRequestBuyNow}
-          onRequestBid={handleRequestBid}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Live search results"
@@ -506,39 +494,13 @@ export default function App() {
           isLoading={isVehicleDetailsLoading}
           purchaseMessage={vehicleDetailsPurchaseMessage}
           isWatchPending={isVehicleDetailsWatchPending}
+          onBidPlaced={handleBidPlaced}
           onBuyNow={handleRequestBuyNow}
-          onRequestBid={handleRequestBid}
           onClose={closeVehicleDetails}
           onOpenImage={setSelectedImageUrl}
           onToggleWatch={handleVehicleDetailsWatchToggle}
           vehicle={selectedVehicle}
           watchErrorMessage={vehicleDetailsWatchErrorMessage}
-        />
-      ) : null}
-
-      {bidVehicle ? (
-        <BidNowModal
-          apiBaseUrl={API_BASE_URL}
-          onBidPlaced={(payload) => {
-            const successMessage = `Bid placed at ${formatCurrency(payload.current_bid)}.`;
-            setPurchaseFeedbackTone("info");
-            setPurchaseFeedbackMessage(successMessage);
-            if (selectedVehicle?.id === payload.vehicle_id) {
-              setVehicleDetailsPurchaseMessage(successMessage);
-              setSelectedVehicle((currentVehicle) =>
-                currentVehicle
-                  ? {
-                      ...currentVehicle,
-                      bid_count: payload.bid_count,
-                      current_bid: payload.current_bid,
-                    }
-                  : currentVehicle,
-              );
-            }
-          }}
-          onClose={() => setBidVehicle(null)}
-          userId={CURRENT_USER_ID}
-          vehicle={bidVehicle}
         />
       ) : null}
 

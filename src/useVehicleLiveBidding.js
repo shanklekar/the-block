@@ -121,6 +121,10 @@ export function useVehicleLiveBidding({
       return undefined;
     }
 
+    if (!hasAuctionStarted(vehicle?.auction_start) && !vehicle?.is_purchased) {
+      return undefined;
+    }
+
     const controller = new AbortController();
 
     async function hydrateBiddingState() {
