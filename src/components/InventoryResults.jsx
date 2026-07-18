@@ -24,6 +24,7 @@ export default function InventoryResults({
   isBootstrapping,
   isInitialLoading,
   isLoadingMore,
+  onSelectVehicle,
   resultsSentinelRef,
   totalVehicles,
   vehicles,
@@ -61,7 +62,11 @@ export default function InventoryResults({
       {!isBootstrapping && !isInitialLoading && vehicles.length > 0 ? (
         <div className="vehicle-grid">
           {vehicles.map((vehicle) => (
-            <VehicleCard key={vehicle.id} vehicle={vehicle} />
+            <VehicleCard
+              key={vehicle.id}
+              onSelect={onSelectVehicle}
+              vehicle={vehicle}
+            />
           ))}
         </div>
       ) : null}

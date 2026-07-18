@@ -318,6 +318,14 @@ export function formatCurrency(value) {
   }).format(value);
 }
 
+export function formatConditionGrade(value) {
+  if (typeof value !== "number") {
+    return "N/A";
+  }
+
+  return value.toFixed(1);
+}
+
 export function formatAuctionDate(value) {
   if (!value) {
     return "Schedule unavailable";

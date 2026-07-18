@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import InventoryFilters from "./components/InventoryFilters";
 import OpenlaneLogo from "./components/OpenlaneLogo";
 import InventoryResults from "./components/InventoryResults";
+import VehicleDetailsModal from "./components/VehicleDetailsModal";
+import VehicleImageLightbox from "./components/VehicleImageLightbox";
 import {
   DEFAULT_FILTERS,
   FILTER_GROUPS,
@@ -44,8 +46,14 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [debouncedCriteriaKey, setDebouncedCriteriaKey] =
     useState(defaultCriteriaKey);
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [isVehicleDetailsLoading, setIsVehicleDetailsLoading] = useState(false);
+  const [vehicleDetailsErrorMessage, setVehicleDetailsErrorMessage] = useState("");
+  const [selectedImageUrl, setSelectedImageUrl] = useState("");
 
   const requestControllerRef = useRef(null);
+  const vehicleDetailsRequestRef = useRef(null);
   const activeCriteriaKeyRef = useRef(defaultCriteriaKey);
   const resultsSentinelRef = useRef(null);
   const isInitialLoadingRef = useRef(false);
@@ -179,6 +187,93 @@ export default function App() {
       controller.abort();
     };
   }, [debouncedCriteriaKey, filterMetadata, filterSchema]);
+
+  useEffect(() => {
+    if (!selectedVehicleId) {
+      setSelectedVehicle(null);
+      setIsVehicleDetailsLoading(false);
+      setVehicleDetailsErrorMessage("");
+      vehicleDetailsRequestRef.current?.abort();
+      return undefined;
+    }
+
+    vehicleDetailsRequestRef.current?.abort();
+    const controller = new AbortController();
+    vehicleDetailsRequestRef.current = controller;
+
+    async function loadVehicleDetails() {
+      try {
+        setIsVehicleDetailsLoading(true);
+        setVehicleDetailsErrorMessage("");
+        setSelectedVehicle(null);
+
+        const response = await fetch(`${API_BASE_URL}/api/vehicles/${selectedVehicleId}`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to load vehicle details.");
+        }
+
+        const payload = await response.json();
+        setSelectedVehicle(payload);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          setVehicleDetailsErrorMessage("We couldn't load this vehicle right now.");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsVehicleDetailsLoading(false);
+        }
+      }
+    }
+
+    loadVehicleDetails();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedVehicleId]);
+
+  useEffect(() => {
+    if (!selectedVehicleId && !selectedImageUrl) {
+      return undefined;
+    }
+
+    function handleEscape(event) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (selectedImageUrl) {
+        setSelectedImageUrl("");
+        return;
+      }
+
+      setSelectedVehicleId("");
+      setSelectedVehicle(null);
+      setVehicleDetailsErrorMessage("");
+    }
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [selectedImageUrl, selectedVehicleId]);
+
+  useEffect(() => {
+    if (!selectedVehicleId && !selectedImageUrl) {
+      return undefined;
+    }
+
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [selectedImageUrl, selectedVehicleId]);
 
   useEffect(() => {
     if (!resultsSentinelRef.current || !hasMore || isInitialLoading || isLoadingMore) {
@@ -330,6 +425,20 @@ export default function App() {
     setFilters(DEFAULT_FILTERS);
   }
 
+  function openVehicleDetails(vehicleId) {
+    setSelectedImageUrl("");
+    setSelectedVehicleId(vehicleId);
+  }
+
+  function closeVehicleDetails() {
+    vehicleDetailsRequestRef.current?.abort();
+    setSelectedImageUrl("");
+    setSelectedVehicleId("");
+    setSelectedVehicle(null);
+    setIsVehicleDetailsLoading(false);
+    setVehicleDetailsErrorMessage("");
+  }
+
   const allowedFields = new Set(
     filterSchema
       ? [
@@ -386,11 +495,34 @@ export default function App() {
           isBootstrapping={isBootstrapping}
           isInitialLoading={isInitialLoading}
           isLoadingMore={isLoadingMore}
+          onSelectVehicle={openVehicleDetails}
           resultsSentinelRef={resultsSentinelRef}
           totalVehicles={totalVehicles}
           vehicles={vehicles}
         />
       </section>
+
+      {selectedVehicleId ? (
+        <VehicleDetailsModal
+          errorMessage={vehicleDetailsErrorMessage}
+          isLoading={isVehicleDetailsLoading}
+          onClose={closeVehicleDetails}
+          onOpenImage={setSelectedImageUrl}
+          vehicle={selectedVehicle}
+        />
+      ) : null}
+
+      {selectedImageUrl ? (
+        <VehicleImageLightbox
+          imageUrl={selectedImageUrl}
+          onClose={() => setSelectedImageUrl("")}
+          vehicleTitle={
+            selectedVehicle
+              ? `${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}`
+              : "Vehicle image"
+          }
+        />
+      ) : null}
     </main>
   );
 }

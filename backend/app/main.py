@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from datetime import timedelta
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,7 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
-from .database import get_connection, serialize_vehicle
+from .database import (
+    get_auction_start_offset,
+    get_connection,
+    serialize_vehicle,
+    shift_auction_start,
+)
 from .schemas import (
     DATETIME_FIELDS,
     NUMERIC_FIELDS,
@@ -81,6 +87,45 @@ OPERATOR_SQL = {
     FilterOperator.GT: "> ?",
     FilterOperator.GTE: ">= ?",
 }
+
+
+def _shift_datetime_filter_value(value: Any, offset: timedelta) -> Any:
+    if isinstance(value, str):
+        return shift_auction_start(value, offset)
+
+    if isinstance(value, list):
+        return [
+            shift_auction_start(item, offset) if isinstance(item, str) else item
+            for item in value
+        ]
+
+    if isinstance(value, dict):
+        shifted_value = value.copy()
+        for bound in ("min", "max"):
+            bound_value = shifted_value.get(bound)
+            if isinstance(bound_value, str):
+                shifted_value[bound] = shift_auction_start(bound_value, offset)
+        return shifted_value
+
+    return value
+
+
+def _translate_criteria_to_stored_timeline(
+    criteria: FilterCriteria,
+    auction_start_offset: timedelta,
+) -> FilterCriteria:
+    if not criteria.rules:
+        return criteria
+
+    translated_criteria = criteria.model_copy(deep=True)
+
+    for rule in translated_criteria.rules:
+        if rule.field not in DATETIME_FIELDS or rule.value is None:
+            continue
+
+        rule.value = _shift_datetime_filter_value(rule.value, -auction_start_offset)
+
+    return translated_criteria
 
 
 def _build_rule_clause(rule: FilterRule) -> tuple[str, list[Any]]:
@@ -257,6 +302,8 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
     datetime: dict[str, DatetimeMetadata] = {}
 
     with get_connection() as connection:
+        auction_start_offset = get_auction_start_offset(connection)
+
         for field in FILTER_METADATA_FIELDS["categorical"]:
             query = f"""
                 SELECT DISTINCT {field}
@@ -277,7 +324,10 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
             row = connection.execute(
                 f"SELECT MIN({field}) AS minimum, MAX({field}) AS maximum FROM vehicles"
             ).fetchone()
-            datetime[field] = DatetimeMetadata(min=row["minimum"], max=row["maximum"])
+            datetime[field] = DatetimeMetadata(
+                min=shift_auction_start(row["minimum"], auction_start_offset),
+                max=shift_auction_start(row["maximum"], auction_start_offset),
+            )
 
     return VehicleFilterMetadataResponse(
         categorical=categorical,
@@ -288,29 +338,38 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
 
 @app.post("/api/vehicles/search", response_model=VehicleSearchResponse)
 def search_vehicles(payload: VehicleSearchRequest) -> VehicleSearchResponse:
-    where_clause, parameters = build_where_clause(payload.criteria)
-    query = f"""
-        SELECT *
-        FROM vehicles
-        {where_clause}
-        ORDER BY auction_start ASC, year DESC, make ASC, model ASC
-        LIMIT ?
-        OFFSET ?
-    """
-    count_query = f"""
-        SELECT COUNT(*) AS total
-        FROM vehicles
-        {where_clause}
-    """
-
     with get_connection() as connection:
+        auction_start_offset = get_auction_start_offset(connection)
+        translated_criteria = _translate_criteria_to_stored_timeline(
+            payload.criteria,
+            auction_start_offset,
+        )
+        where_clause, parameters = build_where_clause(translated_criteria)
+        query = f"""
+            SELECT *
+            FROM vehicles
+            {where_clause}
+            ORDER BY auction_start ASC, year DESC, make ASC, model ASC
+            LIMIT ?
+            OFFSET ?
+        """
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM vehicles
+            {where_clause}
+        """
         total_row = connection.execute(count_query, parameters).fetchone()
         rows = connection.execute(
             query,
             [*parameters, payload.limit, payload.offset],
         ).fetchall()
 
-    vehicles = [VehicleResponse(**serialize_vehicle(row)) for row in rows]
+    vehicles = [
+        VehicleResponse(
+            **serialize_vehicle(row, auction_start_offset=auction_start_offset)
+        )
+        for row in rows
+    ]
     return VehicleSearchResponse(
         count=len(vehicles),
         limit=payload.limit,
@@ -325,12 +384,15 @@ def get_vehicle(vehicle_id: str) -> VehicleResponse:
     query = "SELECT * FROM vehicles WHERE id = ? LIMIT 1"
 
     with get_connection() as connection:
+        auction_start_offset = get_auction_start_offset(connection)
         row = connection.execute(query, [vehicle_id]).fetchone()
 
     if row is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    return VehicleResponse(**serialize_vehicle(row))
+    return VehicleResponse(
+        **serialize_vehicle(row, auction_start_offset=auction_start_offset)
+    )
 
 
 @app.get("/")

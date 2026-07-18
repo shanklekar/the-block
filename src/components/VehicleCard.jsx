@@ -1,21 +1,30 @@
 import {
   formatAuctionDate,
+  formatConditionGrade,
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
 
-export default function VehicleCard({ vehicle }) {
+export default function VehicleCard({ onSelect, vehicle }) {
   const primaryImage =
     vehicle.images[0] ??
     "https://placehold.co/800x600/1a1a2e/eaeaea?text=Vehicle+Image";
   const vehicleTitle = `${vehicle.make} ${vehicle.year} ${vehicle.model}`;
-  const vehicleGrade =
-    typeof vehicle.condition_grade === "number"
-      ? vehicle.condition_grade.toFixed(1)
-      : "N/A";
+  const vehicleGrade = formatConditionGrade(vehicle.condition_grade);
 
   return (
-    <article className="vehicle-card">
+    <article
+      className="vehicle-card"
+      onClick={() => onSelect(vehicle.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(vehicle.id);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
       <div className="vehicle-card-media">
         <img
           alt={vehicleTitle}
