@@ -62,14 +62,14 @@ export default function VehicleDetailsModal({
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
     : `Add ${vehicleTitle} to watchlist`;
-  const vehicleIsPurchased = Boolean(
-    isPurchased || displayVehicle?.is_purchased || biddingState?.is_sold,
-  );
-  const canBuyNow = Number(displayVehicle?.buy_now_price) > 0 && !vehicleIsPurchased;
+  const vehicleIsPurchased = Boolean(isPurchased);
+  const vehicleIsSold = Boolean(displayVehicle?.is_purchased || biddingState?.is_sold);
+  const showBuyNowButton =
+    Number(displayVehicle?.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
   const minimumNextBid = biddingState?.minimum_next_bid ?? null;
   const bidStatusMessage = biddingState && !biddingState.auction_started
     ? "Auction has not started yet."
-    : vehicleIsPurchased
+    : vehicleIsSold
       ? "This vehicle has already been sold."
       : "";
 
@@ -122,7 +122,7 @@ export default function VehicleDetailsModal({
 
               <div className="vehicle-detail-summary-stack">
                 <div className="vehicle-detail-action-stack">
-                  {canBid && minimumNextBid ? (
+                  {canBid && minimumNextBid && !vehicleIsSold ? (
                     <BidNowButton
                       amount={minimumNextBid}
                       className="vehicle-bid-now-detail"
@@ -130,7 +130,7 @@ export default function VehicleDetailsModal({
                     />
                   ) : null}
 
-                  {canBuyNow ? (
+                  {showBuyNowButton ? (
                     <BuyNowButton
                       className="vehicle-buy-now-detail"
                       isPurchased={vehicleIsPurchased}

@@ -67,6 +67,7 @@ export function mergeVehicleWithBiddingState(vehicle, biddingState) {
     starting_bid: biddingState.starting_bid ?? vehicle.starting_bid,
     bid_count: biddingState.bid_count,
     is_purchased: Boolean(vehicle.is_purchased || biddingState.is_sold),
+    is_purchased_by_user: Boolean(vehicle.is_purchased_by_user),
   };
 }
 

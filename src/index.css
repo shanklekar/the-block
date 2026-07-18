@@ -462,6 +462,8 @@ img {
 }
 
 .vehicle-card {
+  display: flex;
+  flex-direction: column;
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(58, 99, 240, 0.1);
@@ -573,15 +575,22 @@ img {
 }
 
 .vehicle-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   padding: 14px;
 }
 
-.vehicle-card-buy-now {
-  margin-top: 14px;
+.vehicle-card-actions {
+  display: grid;
+  gap: 14px;
+  margin-top: auto;
+  padding-top: 14px;
 }
 
+.vehicle-card-buy-now,
 .vehicle-card-bid-now {
-  margin-top: 14px;
+  margin-top: 0;
 }
 
 .vehicle-card-heading {
@@ -675,11 +684,11 @@ img {
   border: 0;
   border-radius: 16px;
   padding: 14px 16px;
-  background: linear-gradient(135deg, #2147c9, #3d74ff);
+  background: linear-gradient(135deg, #c62828, #ef5350);
   color: #fff;
   font-size: 0.94rem;
   font-weight: 800;
-  box-shadow: 0 14px 28px rgba(33, 71, 201, 0.24);
+  box-shadow: 0 14px 28px rgba(198, 40, 40, 0.28);
   transition:
     transform 160ms ease,
     box-shadow 160ms ease,
@@ -689,15 +698,15 @@ img {
 .bid-now-button:hover:not(:disabled),
 .bid-submit-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 18px 30px rgba(33, 71, 201, 0.3);
+  box-shadow: 0 18px 30px rgba(198, 40, 40, 0.34);
 }
 
 .bid-now-button:focus-visible,
 .bid-submit-button:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 4px rgba(165, 194, 255, 0.72),
-    0 18px 30px rgba(33, 71, 201, 0.3);
+    0 0 0 4px rgba(255, 205, 210, 0.78),
+    0 18px 30px rgba(198, 40, 40, 0.34);
 }
 
 .bid-now-button:disabled,

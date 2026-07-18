@@ -297,11 +297,13 @@ class VehicleResponse(BaseModel):
 class VehicleSearchResult(VehicleResponse):
     is_watched: bool = False
     is_purchased: bool = False
+    is_purchased_by_user: bool = False
 
 
 class VehicleDetailResponse(VehicleResponse):
     is_watched: bool = False
     is_purchased: bool = False
+    is_purchased_by_user: bool = False
 
 
 class VehicleSearchResponse(BaseModel):

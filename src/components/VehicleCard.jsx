@@ -11,8 +11,8 @@ import WatchToggleButton from "./WatchToggleButton";
 
 export default function VehicleCard({
   apiBaseUrl = "",
+  bidActionMode = "active-only",
   currentUserId = null,
-  enableLiveBidding = false,
   isPurchased = false,
   onBuyNow,
   onRequestBid,
@@ -24,7 +24,7 @@ export default function VehicleCard({
 }) {
   const { biddingState, canBid, liveVehicle } = useVehicleLiveBidding({
     apiBaseUrl,
-    enabled: enableLiveBidding,
+    enabled: bidActionMode === "active-only",
     userId: currentUserId,
     vehicle,
   });
@@ -45,10 +45,19 @@ export default function VehicleCard({
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
     : `Add ${vehicleTitle} to watchlist`;
-  const vehicleIsPurchased = Boolean(isPurchased || displayVehicle.is_purchased);
-  const canBuyNow = Number(displayVehicle.buy_now_price) > 0 && !vehicleIsPurchased;
+  const vehicleIsPurchased = Boolean(isPurchased || displayVehicle.is_purchased_by_user);
+  const vehicleIsSold = Boolean(displayVehicle.is_purchased);
+  const showBuyNowButton =
+    Number(displayVehicle.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
   const minimumNextBid = biddingState?.minimum_next_bid ?? null;
-  const showBidButton = enableLiveBidding && canBid && !vehicleIsPurchased && minimumNextBid;
+  const showLiveSearchBidButton =
+    bidActionMode === "watch-before-bid" && !vehicleIsSold && !vehicleIsPurchased;
+  const showActiveBidButton =
+    bidActionMode === "active-only" &&
+    canBid &&
+    !vehicleIsSold &&
+    !vehicleIsPurchased &&
+    minimumNextBid;
 
   return (
     <article
@@ -116,36 +125,56 @@ export default function VehicleCard({
           </div>
         </dl>
 
-        {showBidButton ? (
-          <div
-            className="vehicle-card-bid-now"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <BidNowButton
-              amount={minimumNextBid}
-              onClick={(event) => {
-                event.stopPropagation();
-                onRequestBid?.(displayVehicle);
-              }}
-            />
-          </div>
-        ) : null}
+        {showLiveSearchBidButton || showActiveBidButton || showBuyNowButton ? (
+          <div className="vehicle-card-actions">
+            {showBuyNowButton ? (
+              <div
+                className="vehicle-card-buy-now"
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <BuyNowButton
+                  isPurchased={vehicleIsPurchased}
+                  price={displayVehicle.buy_now_price}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onBuyNow?.(displayVehicle);
+                  }}
+                />
+              </div>
+            ) : null}
 
-        {canBuyNow ? (
-          <div
-            className="vehicle-card-buy-now"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <BuyNowButton
-              isPurchased={vehicleIsPurchased}
-              price={displayVehicle.buy_now_price}
-              onClick={(event) => {
-                event.stopPropagation();
-                onBuyNow?.(displayVehicle);
-              }}
-            />
+            {showLiveSearchBidButton ? (
+              <div
+                className="vehicle-card-bid-now"
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <BidNowButton
+                  label="Bid on this vehicle"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestBid?.(displayVehicle);
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {showActiveBidButton ? (
+              <div
+                className="vehicle-card-bid-now"
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <BidNowButton
+                  amount={minimumNextBid}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestBid?.(displayVehicle);
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

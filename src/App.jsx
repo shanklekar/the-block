@@ -229,6 +229,7 @@ export default function App() {
     if (
       !vehicle ||
       vehicle.is_purchased ||
+      vehicle.is_purchased_by_user ||
       purchasedVehicleIds[vehicle.id] ||
       soldVehicleIds[vehicle.id]
     ) {
@@ -239,6 +240,58 @@ export default function App() {
     setPurchaseFeedbackMessage("");
     setVehicleDetailsPurchaseMessage("");
     setBidVehicle(vehicle);
+  }
+
+  async function handleRequestLiveSearchBid(vehicle) {
+    if (
+      !vehicle ||
+      vehicle.is_purchased ||
+      vehicle.is_purchased_by_user ||
+      purchasedVehicleIds[vehicle.id] ||
+      soldVehicleIds[vehicle.id]
+    ) {
+      return;
+    }
+
+    setPurchaseFeedbackTone("info");
+    setPurchaseFeedbackMessage("");
+    setVehicleDetailsPurchaseMessage("");
+    setVehicleDetailsWatchErrorMessage("");
+
+    if (vehicle.is_watched) {
+      handleRequestBid(vehicle);
+      return;
+    }
+
+    try {
+      const response = await fetch(WATCH_MUTATION_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicle_id: vehicle.id,
+          watch: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to update watchlist.");
+      }
+
+      const payload = await response.json();
+      handleWatchStateChanged({
+        isWatched: payload.is_watched,
+        vehicleId: payload.vehicle_id,
+      });
+      handleRequestBid({
+        ...vehicle,
+        is_watched: payload.is_watched,
+      });
+    } catch {
+      setPurchaseFeedbackTone("error");
+      setPurchaseFeedbackMessage("We couldn't update that watchlist item.");
+    }
   }
 
   async function handleConfirmBuyNow() {
@@ -276,7 +329,12 @@ export default function App() {
         if (selectedVehicle?.id === vehicleId) {
           setSelectedVehicle((currentVehicle) =>
             currentVehicle
-              ? { ...currentVehicle, is_purchased: true, is_watched: true }
+              ? {
+                  ...currentVehicle,
+                  is_purchased: true,
+                  is_purchased_by_user: true,
+                  is_watched: true,
+                }
               : currentVehicle,
           );
         }
@@ -426,10 +484,10 @@ export default function App() {
 
         <InventorySection
           apiBaseUrl={API_BASE_URL}
+          bidActionMode="active-only"
           bootstrapErrorMessage={bootstrapErrorMessage}
           currentUserId={CURRENT_USER_ID}
           emptyStateMessage="No watched vehicles match your criteria."
-          enableLiveBidding
           enableWatchToggle
           filterMetadata={filterMetadata}
           filterPanelId="watchlist-filters-panel"
@@ -457,6 +515,7 @@ export default function App() {
 
         <InventorySection
           apiBaseUrl={API_BASE_URL}
+          bidActionMode="watch-before-bid"
           bootstrapErrorMessage={bootstrapErrorMessage}
           currentUserId={CURRENT_USER_ID}
           emptyStateMessage="No vehicles match your criteria."
@@ -469,7 +528,7 @@ export default function App() {
           hiddenVehicleIds={soldVehicleIds}
           isBootstrapping={isBootstrapping}
           onRequestBuyNow={handleRequestBuyNow}
-          onRequestBid={handleRequestBid}
+          onRequestBid={handleRequestLiveSearchBid}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Live search results"
@@ -493,7 +552,8 @@ export default function App() {
           errorMessage={vehicleDetailsErrorMessage}
           isPurchased={Boolean(
             selectedVehicle &&
-              (selectedVehicle.is_purchased || purchasedVehicleIds[selectedVehicle.id]),
+              (selectedVehicle.is_purchased_by_user ||
+                purchasedVehicleIds[selectedVehicle.id]),
           )}
           isLoading={isVehicleDetailsLoading}
           purchaseMessage={vehicleDetailsPurchaseMessage}

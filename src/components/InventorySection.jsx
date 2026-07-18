@@ -59,10 +59,10 @@ function filterHiddenVehicles(vehicles, hiddenVehicleIds) {
 
 export default function InventorySection({
   apiBaseUrl = "",
+  bidActionMode = "active-only",
   bootstrapErrorMessage,
   currentUserId = null,
   enableWatchToggle = false,
-  enableLiveBidding = false,
   filterMetadata,
   filterSchema,
   filterPanelId,
@@ -457,9 +457,9 @@ export default function InventorySection({
     <InventoryResults
       apiBaseUrl={apiBaseUrl}
       activeFilterCount={activeFilterCount}
+      bidActionMode={bidActionMode}
       currentUserId={currentUserId}
       emptyStateMessage={emptyStateMessage}
-      enableLiveBidding={enableLiveBidding}
       errorMessage={displayErrorMessage}
       filterPanelId={filterPanelId}
       filtersOpen={filtersOpen}

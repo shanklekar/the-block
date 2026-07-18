@@ -22,9 +22,9 @@ function LoadingCards() {
 export default function InventoryResults({
   apiBaseUrl = "",
   activeFilterCount,
+  bidActionMode = "active-only",
   currentUserId = null,
   emptyStateMessage = "No vehicles match your criteria.",
-  enableLiveBidding = false,
   errorMessage,
   filterPanelId,
   filtersOpen,
@@ -114,9 +114,11 @@ export default function InventoryResults({
           {vehicles.map((vehicle) => (
             <VehicleCard
               apiBaseUrl={apiBaseUrl}
+              bidActionMode={bidActionMode}
               currentUserId={currentUserId}
-              enableLiveBidding={enableLiveBidding}
-              isPurchased={Boolean(vehicle.is_purchased || purchasedVehicleIds[vehicle.id])}
+              isPurchased={Boolean(
+                vehicle.is_purchased_by_user || purchasedVehicleIds[vehicle.id],
+              )}
               key={vehicle.id}
               onBuyNow={onRequestBuyNow}
               onRequestBid={onRequestBid}

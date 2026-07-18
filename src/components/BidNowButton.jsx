@@ -4,6 +4,7 @@ export default function BidNowButton({
   amount,
   className = "",
   disabled = false,
+  label,
   onClick,
 }) {
   return (
@@ -13,7 +14,7 @@ export default function BidNowButton({
       type="button"
       onClick={disabled ? undefined : onClick}
     >
-      {`Bid now ${formatCurrency(amount)}`}
+      {label ?? `Bid now ${formatCurrency(amount)}`}
     </button>
   );
 }

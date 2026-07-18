@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { formatCurrency } from "../inventoryConfig";
+import { formatAuctionDate, formatCurrency } from "../inventoryConfig";
 import {
   getLiveDisplayBid,
   useVehicleLiveBidding,
@@ -47,6 +47,11 @@ export default function BidNowModal({
   const vehicleTitle = [vehicle?.year, vehicle?.make, vehicle?.model, vehicle?.trim]
     .filter(Boolean)
     .join(" ");
+  const auctionStartMessage = auctionStarted
+    ? ""
+    : vehicle?.auction_start
+      ? `Auction starts ${formatAuctionDate(vehicle.auction_start)}.`
+      : "This auction has not started yet.";
 
   useEffect(() => {
     if (!minimumNextBid) {
@@ -127,9 +132,7 @@ export default function BidNowModal({
           </div>
         </div>
 
-        {!auctionStarted ? (
-          <div className="inventory-feedback">This auction has not started yet.</div>
-        ) : null}
+        {!auctionStarted ? <div className="inventory-feedback">{auctionStartMessage}</div> : null}
         {isSold ? (
           <div className="inventory-feedback error">This vehicle has already been sold.</div>
         ) : null}

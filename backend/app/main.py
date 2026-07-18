@@ -424,6 +424,23 @@ def _build_is_purchased_select() -> str:
     """
 
 
+def _build_is_purchased_by_user_select(user_id: int | None) -> tuple[str, list[Any]]:
+    if user_id is None:
+        return "0 AS is_purchased_by_user", []
+
+    return (
+        """
+        EXISTS (
+            SELECT 1
+            FROM purchased
+            WHERE purchased.user_id = ?
+              AND purchased.vehicle_id = vehicles.id
+        ) AS is_purchased_by_user
+        """,
+        [user_id],
+    )
+
+
 def _ensure_vehicle_is_watched(
     connection: sqlite3.Connection,
     *,
@@ -475,8 +492,11 @@ def _build_vehicle_search_response(
         order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
         watch_select, watch_parameters = _build_is_watched_select(payload.user_id)
         purchase_select = _build_is_purchased_select()
+        purchased_by_user_select, purchased_by_user_parameters = (
+            _build_is_purchased_by_user_select(payload.user_id)
+        )
         query = f"""
-            SELECT vehicles.*, {watch_select}, {purchase_select}
+            SELECT vehicles.*, {watch_select}, {purchase_select}, {purchased_by_user_select}
             FROM vehicles
             {where_clause}
             {order_clause}
@@ -491,7 +511,13 @@ def _build_vehicle_search_response(
         total_row = connection.execute(count_query, parameters).fetchone()
         rows = connection.execute(
             query,
-            [*watch_parameters, *parameters, payload.limit, payload.offset],
+            [
+                *watch_parameters,
+                *purchased_by_user_parameters,
+                *parameters,
+                payload.limit,
+                payload.offset,
+            ],
         ).fetchall()
 
     vehicles: list[VehicleSearchResult] = []
@@ -499,6 +525,9 @@ def _build_vehicle_search_response(
         vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
         vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
         vehicle_data["is_purchased"] = bool(vehicle_data.get("is_purchased"))
+        vehicle_data["is_purchased_by_user"] = bool(
+            vehicle_data.get("is_purchased_by_user")
+        )
         vehicles.append(VehicleSearchResult(**vehicle_data))
 
     return VehicleSearchResponse(
@@ -1030,7 +1059,12 @@ def get_vehicle(
     user_id: int | None = Query(default=None, ge=0),
 ) -> VehicleDetailResponse:
     purchase_select = _build_is_purchased_select()
-    select_clause = f"vehicles.*, 0 AS is_watched, {purchase_select}"
+    purchased_by_user_select, purchased_by_user_parameters = (
+        _build_is_purchased_by_user_select(user_id)
+    )
+    select_clause = (
+        f"vehicles.*, 0 AS is_watched, {purchase_select}, {purchased_by_user_select}"
+    )
     query_parameters: list[Any] = [vehicle_id]
 
     if user_id is not None:
@@ -1042,9 +1076,12 @@ def get_vehicle(
                 WHERE watching.user_id = ?
                   AND watching.vehicle_id = vehicles.id
             ) AS is_watched,
-            {purchase_select}
+            {purchase_select},
+            {purchased_by_user_select}
         """
-        query_parameters = [user_id, vehicle_id]
+        query_parameters = [user_id, *purchased_by_user_parameters, vehicle_id]
+    else:
+        query_parameters = [*purchased_by_user_parameters, vehicle_id]
 
     query = f"SELECT {select_clause} FROM vehicles WHERE id = ? LIMIT 1"
 
@@ -1061,6 +1098,7 @@ def get_vehicle(
     vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
     vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
     vehicle_data["is_purchased"] = bool(vehicle_data.get("is_purchased"))
+    vehicle_data["is_purchased_by_user"] = bool(vehicle_data.get("is_purchased_by_user"))
     return VehicleDetailResponse(**vehicle_data)
 
 
