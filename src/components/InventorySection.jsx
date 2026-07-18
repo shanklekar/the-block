@@ -145,7 +145,7 @@ export default function InventorySection({
       : [],
   );
   const displayErrorMessage = errorMessage || bootstrapErrorMessage;
-  const shouldIncludeWatchState = enableWatchToggle && currentUserId !== null;
+  const shouldIncludeUserContext = currentUserId !== null;
   const hiddenVehicleIdsKey = JSON.stringify(Object.keys(hiddenVehicleIds).sort());
   const purchasedVehicleIdsKey = JSON.stringify(Object.keys(purchasedVehicleIds).sort());
 
@@ -198,7 +198,7 @@ export default function InventorySection({
       criteria,
       sort_by: sortBy,
       sort_direction: sortDirection,
-      ...(shouldIncludeWatchState ? { user_id: currentUserId } : {}),
+      ...(shouldIncludeUserContext ? { user_id: currentUserId } : {}),
     };
   }
 
@@ -285,7 +285,7 @@ export default function InventorySection({
     refreshToken,
     searchEndpoint,
     selectedSortOption,
-    shouldIncludeWatchState,
+    shouldIncludeUserContext,
     hiddenVehicleIds,
     hiddenVehicleIdsKey,
   ]);

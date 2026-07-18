@@ -160,6 +160,8 @@ uvicorn backend.app.main:app --reload
 
 The API will start on `http://127.0.0.1:8000`.
 
+`backend/requirements.txt` includes an explicit `websockets` dependency because the live bid feed uses FastAPI websocket routes. If websocket support is missing at runtime, live bidding will fail to connect even though the HTTP API still works.
+
 ### Available endpoints
 
 - `GET /health`

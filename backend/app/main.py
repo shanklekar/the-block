@@ -68,29 +68,41 @@ BID_INCREMENT = 100.0
 
 class VehicleBiddingConnectionManager:
     def __init__(self) -> None:
-        self._connections: dict[str, set[WebSocket]] = {}
+        self._connections: dict[str, dict[WebSocket, int]] = {}
 
-    async def connect(self, vehicle_id: str, websocket: WebSocket) -> None:
+    async def connect(self, vehicle_id: str, user_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
-        self._connections.setdefault(vehicle_id, set()).add(websocket)
+        self._connections.setdefault(vehicle_id, {})[websocket] = user_id
 
     def disconnect(self, vehicle_id: str, websocket: WebSocket) -> None:
         subscribers = self._connections.get(vehicle_id)
         if not subscribers:
             return
 
-        subscribers.discard(websocket)
+        subscribers.pop(websocket, None)
         if not subscribers:
             self._connections.pop(vehicle_id, None)
 
-    async def broadcast(self, vehicle_id: str, snapshot: BiddingStateResponse) -> None:
-        subscribers = list(self._connections.get(vehicle_id, ()))
+    async def broadcast(self, vehicle_id: str) -> None:
+        subscribers = list(self._connections.get(vehicle_id, {}).items())
         if not subscribers:
             return
 
+        with get_connection() as connection:
+            auction_start_offset = get_auction_start_offset(connection)
+            row = _get_vehicle_bidding_row(connection, vehicle_id)
+
+            if row is None:
+                return
+
         disconnected: list[WebSocket] = []
-        for websocket in subscribers:
+        for websocket, user_id in subscribers:
             try:
+                snapshot = _build_bidding_state_response(
+                    row,
+                    auction_start_offset,
+                    user_id=user_id,
+                )
                 await websocket.send_json(snapshot.model_dump())
             except Exception:
                 disconnected.append(websocket)
@@ -325,18 +337,29 @@ def _is_vehicle_sold(connection: sqlite3.Connection, vehicle_id: str) -> bool:
     return row is not None
 
 
+def _build_current_high_bidder_user_id_subquery(vehicle_id_reference: str) -> str:
+    return f"""
+        SELECT bids.user_id
+        FROM bids
+        WHERE bids.vehicle_id = {vehicle_id_reference}
+        ORDER BY bids.current_bid DESC, bids.bid_placed_at DESC, bids.rowid DESC
+        LIMIT 1
+    """
+
+
 def _get_vehicle_bidding_row(
     connection: sqlite3.Connection,
     vehicle_id: str,
 ) -> sqlite3.Row | None:
     return connection.execute(
-        """
+        f"""
         SELECT
             vehicles.id,
             vehicles.auction_start,
             vehicles.starting_bid,
             vehicles.current_bid,
             vehicles.bid_count,
+            ({_build_current_high_bidder_user_id_subquery("vehicles.id")}) AS high_bidder_user_id,
             EXISTS (
                 SELECT 1
                 FROM purchased
@@ -379,8 +402,11 @@ def _is_auction_started(
 def _build_bidding_state_response(
     row: sqlite3.Row,
     auction_start_offset: timedelta,
+    *,
+    user_id: int | None = None,
 ) -> BiddingStateResponse:
     active_bid_base = _get_active_bid_base(row)
+    high_bidder_user_id = row["high_bidder_user_id"]
     return BiddingStateResponse(
         vehicle_id=row["id"],
         auction_started=_is_auction_started(row["auction_start"], auction_start_offset),
@@ -389,12 +415,14 @@ def _build_bidding_state_response(
         starting_bid=row["starting_bid"],
         bid_count=row["bid_count"],
         minimum_next_bid=active_bid_base + BID_INCREMENT,
+        is_high_bidder=user_id is not None and high_bidder_user_id == user_id,
     )
 
 
 def _load_bidding_state(
     connection: sqlite3.Connection,
     vehicle_id: str,
+    user_id: int | None = None,
 ) -> BiddingStateResponse:
     auction_start_offset = get_auction_start_offset(connection)
     row = _get_vehicle_bidding_row(connection, vehicle_id)
@@ -402,14 +430,11 @@ def _load_bidding_state(
     if row is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    return _build_bidding_state_response(row, auction_start_offset)
+    return _build_bidding_state_response(row, auction_start_offset, user_id=user_id)
 
 
 async def _broadcast_bidding_state(vehicle_id: str) -> None:
-    with get_connection() as connection:
-        snapshot = _load_bidding_state(connection, vehicle_id)
-
-    await bidding_connection_manager.broadcast(vehicle_id, snapshot)
+    await bidding_connection_manager.broadcast(vehicle_id)
 
 
 def _build_is_watched_select(user_id: int | None) -> tuple[str, list[Any]]:
@@ -451,6 +476,21 @@ def _build_is_purchased_by_user_select(user_id: int | None) -> tuple[str, list[A
             WHERE purchased.user_id = ?
               AND purchased.vehicle_id = vehicles.id
         ) AS is_purchased_by_user
+        """,
+        [user_id],
+    )
+
+
+def _build_is_high_bidder_select(user_id: int | None) -> tuple[str, list[Any]]:
+    if user_id is None:
+        return "0 AS is_high_bidder", []
+
+    return (
+        f"""
+        COALESCE(
+            ({_build_current_high_bidder_user_id_subquery("vehicles.id")}),
+            -1
+        ) = ? AS is_high_bidder
         """,
         [user_id],
     )
@@ -515,8 +555,16 @@ def _build_vehicle_search_response(
         purchased_by_user_select, purchased_by_user_parameters = (
             _build_is_purchased_by_user_select(payload.user_id)
         )
+        high_bidder_select, high_bidder_parameters = _build_is_high_bidder_select(
+            payload.user_id
+        )
         query = f"""
-            SELECT vehicles.*, {watch_select}, {purchase_select}, {purchased_by_user_select}
+            SELECT
+                vehicles.*,
+                {watch_select},
+                {purchase_select},
+                {purchased_by_user_select},
+                {high_bidder_select}
             FROM vehicles
             {where_clause}
             {order_clause}
@@ -534,6 +582,7 @@ def _build_vehicle_search_response(
             [
                 *watch_parameters,
                 *purchased_by_user_parameters,
+                *high_bidder_parameters,
                 *parameters,
                 payload.limit,
                 payload.offset,
@@ -548,6 +597,7 @@ def _build_vehicle_search_response(
         vehicle_data["is_purchased_by_user"] = bool(
             vehicle_data.get("is_purchased_by_user")
         )
+        vehicle_data["is_high_bidder"] = bool(vehicle_data.get("is_high_bidder"))
         vehicles.append(VehicleSearchResult(**vehicle_data))
 
     return VehicleSearchResponse(
@@ -824,7 +874,7 @@ def get_vehicle_bidding_state(
         if not _user_exists(connection, user_id):
             raise HTTPException(status_code=404, detail="User not found")
 
-        return _load_bidding_state(connection, vehicle_id)
+        return _load_bidding_state(connection, vehicle_id, user_id=user_id)
 
 
 @app.post(
@@ -855,6 +905,11 @@ async def place_bid(
                 raise HTTPException(status_code=409, detail="Vehicle has already been sold")
             if not bidding_state.auction_started:
                 raise HTTPException(status_code=409, detail="Auction has not started")
+            if row["high_bidder_user_id"] == user_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="You already hold the highest bid",
+                )
             if payload.amount < bidding_state.minimum_next_bid:
                 raise HTTPException(
                     status_code=409,
@@ -926,6 +981,7 @@ async def vehicle_bidding_stream(
         snapshot = _build_bidding_state_response(
             row,
             get_auction_start_offset(connection),
+            user_id=user_id,
         )
         if snapshot.is_sold:
             await websocket.close(
@@ -940,7 +996,7 @@ async def vehicle_bidding_stream(
             )
             return
 
-    await bidding_connection_manager.connect(vehicle_id, websocket)
+    await bidding_connection_manager.connect(vehicle_id, user_id, websocket)
 
     try:
         await websocket.send_json(snapshot.model_dump())
@@ -1083,8 +1139,10 @@ def get_vehicle(
     purchased_by_user_select, purchased_by_user_parameters = (
         _build_is_purchased_by_user_select(user_id)
     )
+    high_bidder_select, high_bidder_parameters = _build_is_high_bidder_select(user_id)
     select_clause = (
-        f"vehicles.*, 0 AS is_watched, {purchase_select}, {purchased_by_user_select}"
+        "vehicles.*, "
+        f"0 AS is_watched, {purchase_select}, {purchased_by_user_select}, {high_bidder_select}"
     )
     query_parameters: list[Any] = [vehicle_id]
 
@@ -1098,11 +1156,21 @@ def get_vehicle(
                   AND watching.vehicle_id = vehicles.id
             ) AS is_watched,
             {purchase_select},
-            {purchased_by_user_select}
+            {purchased_by_user_select},
+            {high_bidder_select}
         """
-        query_parameters = [user_id, *purchased_by_user_parameters, vehicle_id]
+        query_parameters = [
+            user_id,
+            *purchased_by_user_parameters,
+            *high_bidder_parameters,
+            vehicle_id,
+        ]
     else:
-        query_parameters = [*purchased_by_user_parameters, vehicle_id]
+        query_parameters = [
+            *purchased_by_user_parameters,
+            *high_bidder_parameters,
+            vehicle_id,
+        ]
 
     query = f"SELECT {select_clause} FROM vehicles WHERE id = ? LIMIT 1"
 
@@ -1120,6 +1188,7 @@ def get_vehicle(
     vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
     vehicle_data["is_purchased"] = bool(vehicle_data.get("is_purchased"))
     vehicle_data["is_purchased_by_user"] = bool(vehicle_data.get("is_purchased_by_user"))
+    vehicle_data["is_high_bidder"] = bool(vehicle_data.get("is_high_bidder"))
     return VehicleDetailResponse(**vehicle_data)
 
 

@@ -26,13 +26,19 @@ export default function VehicleBidPanel({
   const [bidAmount, setBidAmount] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOptimisticallyHighBidder, setIsOptimisticallyHighBidder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
   const minimumNextBid = biddingState?.minimum_next_bid ?? 0;
   const auctionStarted = Boolean(biddingState?.auction_started);
   const isSold = Boolean(biddingState?.is_sold || displayVehicle?.is_purchased);
   const isPurchasedByUser = Boolean(isPurchased || displayVehicle?.is_purchased_by_user);
-  const canSubmit = auctionStarted && !isSold && !isPurchasedByUser;
+  const isHighBidder = Boolean(
+    isOptimisticallyHighBidder ||
+      biddingState?.is_high_bidder ||
+      displayVehicle?.is_high_bidder,
+  );
+  const canSubmit = auctionStarted && !isSold && !isPurchasedByUser && !isHighBidder;
   const parsedBidAmount = parseBidAmount(bidAmount);
   const isBidTooLow = parsedBidAmount !== null && parsedBidAmount < minimumNextBid;
   const bidButtonAmount = parsedBidAmount ?? minimumNextBid;
@@ -48,8 +54,15 @@ export default function VehicleBidPanel({
     setBidAmount("");
     setErrorMessage("");
     setIsSubmitting(false);
+    setIsOptimisticallyHighBidder(false);
     setSuccessMessage("");
   }, [displayVehicle?.id]);
+
+  useEffect(() => {
+    if (!biddingState?.is_high_bidder && !displayVehicle?.is_high_bidder) {
+      setIsOptimisticallyHighBidder(false);
+    }
+  }, [biddingState?.is_high_bidder, displayVehicle?.is_high_bidder]);
 
   useEffect(() => {
     if (!minimumNextBid) {
@@ -99,6 +112,7 @@ export default function VehicleBidPanel({
       }
 
       setSuccessMessage(`Bid placed at ${formatCurrency(payload.current_bid)}.`);
+      setIsOptimisticallyHighBidder(true);
       setBidAmount(String(Math.round(payload.current_bid + DEFAULT_BID_INCREMENT)));
       onBidPlaced?.(payload);
     } catch (error) {
@@ -118,6 +132,8 @@ export default function VehicleBidPanel({
     statusMessage = "You already purchased this vehicle.";
   } else if (isSold) {
     statusMessage = "This vehicle has already been sold.";
+  } else if (isHighBidder) {
+    statusMessage = "You're already the highest bidder.";
   }
 
   return (
@@ -172,6 +188,7 @@ export default function VehicleBidPanel({
             step="50"
             type="number"
             value={bidAmount}
+            disabled={!canSubmit || isSubmitting}
             onChange={(event) => {
               setBidAmount(event.target.value);
               setErrorMessage("");
@@ -186,6 +203,7 @@ export default function VehicleBidPanel({
               className="bid-shortcut-button"
               key={increment}
               type="button"
+              disabled={!canSubmit || isSubmitting}
               onClick={() => {
                 setBidAmount(String((displayBid ?? 0) + increment));
                 setErrorMessage("");

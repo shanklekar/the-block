@@ -298,12 +298,14 @@ class VehicleSearchResult(VehicleResponse):
     is_watched: bool = False
     is_purchased: bool = False
     is_purchased_by_user: bool = False
+    is_high_bidder: bool = False
 
 
 class VehicleDetailResponse(VehicleResponse):
     is_watched: bool = False
     is_purchased: bool = False
     is_purchased_by_user: bool = False
+    is_high_bidder: bool = False
 
 
 class VehicleSearchResponse(BaseModel):
@@ -375,6 +377,7 @@ class BiddingStateResponse(BaseModel):
     starting_bid: float | None = None
     bid_count: int
     minimum_next_bid: float
+    is_high_bidder: bool
 
 
 class NumericMetadata(BaseModel):

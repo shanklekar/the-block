@@ -49,6 +49,7 @@ export function buildInitialBiddingState(vehicle) {
     starting_bid: startingBid,
     bid_count: Number.isFinite(vehicle?.bid_count) ? vehicle.bid_count : 0,
     minimum_next_bid: buildMinimumNextBid(currentBid, startingBid),
+    is_high_bidder: Boolean(vehicle?.is_high_bidder),
   };
 }
 
@@ -68,6 +69,9 @@ export function mergeVehicleWithBiddingState(vehicle, biddingState) {
     bid_count: biddingState.bid_count,
     is_purchased: Boolean(vehicle.is_purchased || biddingState.is_sold),
     is_purchased_by_user: Boolean(vehicle.is_purchased_by_user),
+    is_high_bidder: Boolean(
+      biddingState.is_high_bidder ?? vehicle.is_high_bidder,
+    ),
   };
 }
 
@@ -113,6 +117,7 @@ export function useVehicleLiveBidding({
     vehicle?.bid_count,
     vehicle?.current_bid,
     vehicle?.id,
+    vehicle?.is_high_bidder,
     vehicle?.is_purchased,
     vehicle?.starting_bid,
   ]);
@@ -266,7 +271,12 @@ export function useVehicleLiveBidding({
 
   return {
     biddingState,
-    canBid: Boolean(enabled && biddingState?.auction_started && !biddingState?.is_sold),
+    canBid: Boolean(
+      enabled &&
+        biddingState?.auction_started &&
+        !biddingState?.is_sold &&
+        !biddingState?.is_high_bidder,
+    ),
     liveVehicle,
     stateErrorMessage,
   };
