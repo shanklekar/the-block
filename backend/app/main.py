@@ -5,7 +5,7 @@ import sqlite3
 from datetime import timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Path, Request
+from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -28,10 +28,14 @@ from .schemas import (
     NumericMetadata,
     SortDirection,
     SortField,
+    VehicleDetailResponse,
     VehicleResponse,
     VehicleFilterMetadataResponse,
+    VehicleSearchResult,
     VehicleSearchRequest,
     VehicleSearchResponse,
+    WatchingMutationRequest,
+    WatchingMutationResponse,
 )
 
 
@@ -218,12 +222,48 @@ def _combine_where_clauses(*clauses: tuple[str, list[Any]]) -> tuple[str, list[A
     return f"WHERE {' AND '.join(conditions)}", parameters
 
 
+def _user_exists(connection: sqlite3.Connection, user_id: int) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM users WHERE user_id = ? LIMIT 1",
+        [user_id],
+    ).fetchone()
+    return row is not None
+
+
+def _vehicle_exists(connection: sqlite3.Connection, vehicle_id: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM vehicles WHERE id = ? LIMIT 1",
+        [vehicle_id],
+    ).fetchone()
+    return row is not None
+
+
+def _build_is_watched_select(user_id: int | None) -> tuple[str, list[Any]]:
+    if user_id is None:
+        return "0 AS is_watched", []
+
+    return (
+        """
+        EXISTS (
+            SELECT 1
+            FROM watching
+            WHERE watching.user_id = ?
+              AND watching.vehicle_id = vehicles.id
+        ) AS is_watched
+        """,
+        [user_id],
+    )
+
+
 def _build_vehicle_search_response(
     payload: VehicleSearchRequest,
     *,
     extra_clause: tuple[str, list[Any]] | None = None,
 ) -> VehicleSearchResponse:
     with get_connection() as connection:
+        if payload.user_id is not None and not _user_exists(connection, payload.user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
         auction_start_offset = get_auction_start_offset(connection)
         translated_criteria = _translate_criteria_to_stored_timeline(
             payload.criteria,
@@ -235,8 +275,9 @@ def _build_vehicle_search_response(
             criteria_clause,
         )
         order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
+        watch_select, watch_parameters = _build_is_watched_select(payload.user_id)
         query = f"""
-            SELECT *
+            SELECT vehicles.*, {watch_select}
             FROM vehicles
             {where_clause}
             {order_clause}
@@ -251,15 +292,15 @@ def _build_vehicle_search_response(
         total_row = connection.execute(count_query, parameters).fetchone()
         rows = connection.execute(
             query,
-            [*parameters, payload.limit, payload.offset],
+            [*watch_parameters, *parameters, payload.limit, payload.offset],
         ).fetchall()
 
-    vehicles = [
-        VehicleResponse(
-            **serialize_vehicle(row, auction_start_offset=auction_start_offset)
-        )
-        for row in rows
-    ]
+    vehicles: list[VehicleSearchResult] = []
+    for row in rows:
+        vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
+        vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
+        vehicles.append(VehicleSearchResult(**vehicle_data))
+
     return VehicleSearchResponse(
         count=len(vehicles),
         limit=payload.limit,
@@ -444,16 +485,13 @@ def search_watched_vehicles(
     user_id: int = Path(..., ge=0),
 ) -> VehicleSearchResponse:
     with get_connection() as connection:
-        user_exists = connection.execute(
-            "SELECT 1 FROM users WHERE user_id = ? LIMIT 1",
-            [user_id],
-        ).fetchone()
+        user_exists = _user_exists(connection, user_id)
 
-    if user_exists is None:
+    if not user_exists:
         raise HTTPException(status_code=404, detail="User not found")
 
     return _build_vehicle_search_response(
-        payload,
+        payload.model_copy(update={"user_id": user_id}),
         extra_clause=(
             """
             EXISTS (
@@ -468,20 +506,97 @@ def search_watched_vehicles(
     )
 
 
-@app.get("/api/vehicles/{vehicle_id}", response_model=VehicleResponse)
-def get_vehicle(vehicle_id: str) -> VehicleResponse:
-    query = "SELECT * FROM vehicles WHERE id = ? LIMIT 1"
+@app.post(
+    "/api/users/{user_id}/watching",
+    response_model=WatchingMutationResponse,
+)
+def mutate_watching(
+    payload: WatchingMutationRequest,
+    user_id: int = Path(..., ge=0),
+) -> WatchingMutationResponse:
+    with get_connection() as connection:
+        if not _user_exists(connection, user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if not _vehicle_exists(connection, payload.vehicle_id):
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+
+        existing_watch = connection.execute(
+            """
+            SELECT id
+            FROM watching
+            WHERE user_id = ?
+              AND vehicle_id = ?
+            LIMIT 1
+            """,
+            [user_id, payload.vehicle_id],
+        ).fetchone()
+
+        if payload.watch:
+            if existing_watch is None:
+                connection.execute(
+                    """
+                    INSERT INTO watching (user_id, vehicle_id)
+                    VALUES (?, ?)
+                    """,
+                    [user_id, payload.vehicle_id],
+                )
+                connection.commit()
+            is_watched = True
+        else:
+            connection.execute(
+                """
+                DELETE FROM watching
+                WHERE user_id = ?
+                  AND vehicle_id = ?
+                """,
+                [user_id, payload.vehicle_id],
+            )
+            connection.commit()
+            is_watched = False
+
+    return WatchingMutationResponse(
+        user_id=user_id,
+        vehicle_id=payload.vehicle_id,
+        is_watched=is_watched,
+    )
+
+
+@app.get("/api/vehicles/{vehicle_id}", response_model=VehicleDetailResponse)
+def get_vehicle(
+    vehicle_id: str,
+    user_id: int | None = Query(default=None, ge=0),
+) -> VehicleDetailResponse:
+    select_clause = "vehicles.*"
+    query_parameters: list[Any] = [vehicle_id]
+
+    if user_id is not None:
+        select_clause = """
+            vehicles.*,
+            EXISTS (
+                SELECT 1
+                FROM watching
+                WHERE watching.user_id = ?
+                  AND watching.vehicle_id = vehicles.id
+            ) AS is_watched
+        """
+        query_parameters = [user_id, vehicle_id]
+
+    query = f"SELECT {select_clause} FROM vehicles WHERE id = ? LIMIT 1"
 
     with get_connection() as connection:
+        if user_id is not None and not _user_exists(connection, user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
         auction_start_offset = get_auction_start_offset(connection)
-        row = connection.execute(query, [vehicle_id]).fetchone()
+        row = connection.execute(query, query_parameters).fetchone()
 
     if row is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    return VehicleResponse(
-        **serialize_vehicle(row, auction_start_offset=auction_start_offset)
-    )
+    vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
+    vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
+    return VehicleDetailResponse(**vehicle_data)
 
 
 @app.get("/")

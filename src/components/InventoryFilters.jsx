@@ -140,69 +140,69 @@ export default function InventoryFilters({
   onRangeChange,
   onTextChange,
   onToggleCategorical,
+  panelId,
+  panelLabel = "Search filters",
+  title = "Refine inventory",
 }) {
+  if (!isOpen) {
+    return null;
+  }
+
   return (
-    <>
-      <div
-        aria-hidden={!isOpen}
-        className={`inventory-filter-backdrop ${isOpen ? "is-open" : ""}`}
-        onClick={onClose}
-      />
-      <aside className={`inventory-filters ${isOpen ? "is-open" : ""}`}>
-        <div className="inventory-filters-header">
-          <div>
-            <p className="inventory-panel-label">Search filters</p>
-            <h2>Refine inventory</h2>
-          </div>
-          <button className="inventory-close-button" type="button" onClick={onClose}>
-            Close
-          </button>
+    <section className="inventory-filters" id={panelId}>
+      <div className="inventory-filters-header">
+        <div>
+          <p className="inventory-panel-label">{panelLabel}</p>
+          <h2>{title}</h2>
         </div>
+        <button className="inventory-close-button" type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
 
-        <div className="inventory-filter-actions">
-          <p className="inventory-filter-copy">
-            Narrow the lane with the exact vehicle, location, pricing, and
-            condition signals you care about.
-          </p>
-          <button className="inventory-clear-button" type="button" onClick={onClearFilters}>
-            Clear all filters
-          </button>
+      <div className="inventory-filter-actions">
+        <p className="inventory-filter-copy">
+          Narrow the lane with the exact vehicle, location, pricing, and
+          condition signals you care about.
+        </p>
+        <button className="inventory-clear-button" type="button" onClick={onClearFilters}>
+          Clear all filters
+        </button>
+      </div>
+
+      {isBootstrapping ? (
+        <div className="inventory-filter-loading">Loading filters...</div>
+      ) : (
+        <div className="inventory-filter-groups">
+          {filterGroups.map((group) => {
+            const visibleFields = group.fields.filter((field) =>
+              allowedFields.has(field.name),
+            );
+
+            if (!visibleFields.length) {
+              return null;
+            }
+
+            return (
+              <section className="inventory-filter-group" key={group.title}>
+                <h3>{group.title}</h3>
+                {visibleFields.map((field) => (
+                  <FilterField
+                    field={field}
+                    filterMetadata={filterMetadata}
+                    filters={filters}
+                    key={field.name}
+                    onDateChange={onDateChange}
+                    onRangeChange={onRangeChange}
+                    onTextChange={onTextChange}
+                    onToggleCategorical={onToggleCategorical}
+                  />
+                ))}
+              </section>
+            );
+          })}
         </div>
-
-        {isBootstrapping ? (
-          <div className="inventory-filter-loading">Loading filters...</div>
-        ) : (
-          <div className="inventory-filter-groups">
-            {filterGroups.map((group) => {
-              const visibleFields = group.fields.filter((field) =>
-                allowedFields.has(field.name),
-              );
-
-              if (!visibleFields.length) {
-                return null;
-              }
-
-              return (
-                <section className="inventory-filter-group" key={group.title}>
-                  <h3>{group.title}</h3>
-                  {visibleFields.map((field) => (
-                    <FilterField
-                      field={field}
-                      filterMetadata={filterMetadata}
-                      filters={filters}
-                      key={field.name}
-                      onDateChange={onDateChange}
-                      onRangeChange={onRangeChange}
-                      onTextChange={onTextChange}
-                      onToggleCategorical={onToggleCategorical}
-                    />
-                  ))}
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </aside>
-    </>
+      )}
+    </section>
   );
 }

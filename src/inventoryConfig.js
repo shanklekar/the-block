@@ -67,39 +67,43 @@ export const SORT_OPTIONS = [
 
 export const DEFAULT_SORT_OPTION_ID = SORT_OPTIONS[0].id;
 
-export const DEFAULT_FILTERS = {
-  text: {
-    vin: "",
-    model: "",
-    trim: "",
-    engine: "",
-    city: "",
-    selling_dealership: "",
-  },
-  categorical: {
-    make: [],
-    body_style: [],
-    exterior_color: [],
-    interior_color: [],
-    transmission: [],
-    drivetrain: [],
-    fuel_type: [],
-    title_status: [],
-    province: [],
-  },
-  range: {
-    year: { min: "", max: "" },
-    odometer_km: { min: "", max: "" },
-    condition_grade: { min: "", max: "" },
-    starting_bid: { min: "", max: "" },
-    reserve_price: { min: "", max: "" },
-    buy_now_price: { min: "", max: "" },
-    current_bid: { min: "", max: "" },
-  },
-  datetime: {
-    auction_start: { min: "", max: "" },
-  },
-};
+export function createDefaultFilters() {
+  return {
+    text: {
+      vin: "",
+      model: "",
+      trim: "",
+      engine: "",
+      city: "",
+      selling_dealership: "",
+    },
+    categorical: {
+      make: [],
+      body_style: [],
+      exterior_color: [],
+      interior_color: [],
+      transmission: [],
+      drivetrain: [],
+      fuel_type: [],
+      title_status: [],
+      province: [],
+    },
+    range: {
+      year: { min: "", max: "" },
+      odometer_km: { min: "", max: "" },
+      condition_grade: { min: "", max: "" },
+      starting_bid: { min: "", max: "" },
+      reserve_price: { min: "", max: "" },
+      buy_now_price: { min: "", max: "" },
+      current_bid: { min: "", max: "" },
+    },
+    datetime: {
+      auction_start: { min: "", max: "" },
+    },
+  };
+}
+
+export const DEFAULT_FILTERS = createDefaultFilters();
 
 export const FILTER_GROUPS = [
   {

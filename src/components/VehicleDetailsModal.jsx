@@ -4,6 +4,7 @@ import {
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
+import WatchToggleButton from "./WatchToggleButton";
 
 function DetailItem({ label, value }) {
   return (
@@ -26,9 +27,12 @@ function DetailSection({ title, children }) {
 export default function VehicleDetailsModal({
   errorMessage,
   isLoading,
+  isWatchPending = false,
   onClose,
   onOpenImage,
+  onToggleWatch,
   vehicle,
+  watchErrorMessage = "",
 }) {
   const vehicleTitle = vehicle
     ? [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
@@ -37,6 +41,10 @@ export default function VehicleDetailsModal({
     : "Vehicle details";
   const summaryPrice = vehicle?.current_bid ?? vehicle?.starting_bid;
   const leadImageUrl = vehicle?.images[0] ?? "";
+  const isWatched = Boolean(vehicle?.is_watched);
+  const watchToggleLabel = isWatched
+    ? `Remove ${vehicleTitle} from watchlist`
+    : `Add ${vehicleTitle} to watchlist`;
 
   return (
     <div className="modal-shell vehicle-detail-shell" role="dialog" aria-modal="true">
@@ -90,6 +98,15 @@ export default function VehicleDetailsModal({
                   <div className="vehicle-detail-summary-pills">
                     <span>{formatMilesFromKm(vehicle.odometer_km)}</span>
                   </div>
+                  <div className="vehicle-detail-summary-actions">
+                    <WatchToggleButton
+                      className="vehicle-watch-toggle-detail"
+                      disabled={isWatchPending}
+                      isWatched={isWatched}
+                      label={watchToggleLabel}
+                      onToggle={onToggleWatch}
+                    />
+                  </div>
                 </div>
                 <dl className="vehicle-detail-summary-stats">
                   <div>
@@ -109,6 +126,11 @@ export default function VehicleDetailsModal({
                     <dd>{vehicle.bid_count.toLocaleString()}</dd>
                   </div>
                 </dl>
+                {watchErrorMessage ? (
+                  <div className="vehicle-detail-inline-message" role="status">
+                    {watchErrorMessage}
+                  </div>
+                ) : null}
               </div>
             </section>
 

@@ -20,17 +20,30 @@ function LoadingCards() {
 }
 
 export default function InventoryResults({
+  activeFilterCount,
+  emptyStateMessage = "No vehicles match your criteria.",
   errorMessage,
+  filterPanelId,
+  filtersOpen,
+  filtersPanel,
   hasMore,
   isBootstrapping,
   isInitialLoading,
   isLoadingMore,
   onSelectVehicle,
   onSortChange,
+  onToggleWatch,
+  onToggleFilters,
+  panelLabel = "Live search results",
+  pendingWatchVehicleIds = [],
   resultsSentinelRef,
+  sortLabel = "Sort by",
   sortOptionId,
+  title = "Inventory results",
   totalVehicles,
   vehicles,
+  watchMutationErrorMessage = "",
+  watchToggleEnabled = false,
 }) {
   const showEmptyState =
     !isBootstrapping && !isInitialLoading && !errorMessage && vehicles.length === 0;
@@ -39,16 +52,23 @@ export default function InventoryResults({
     <section className="inventory-results">
       <header className="inventory-results-header">
         <div>
-          <p className="inventory-panel-label">Live search results</p>
-          <h2>
-            {totalVehicles > 0
-              ? `${totalVehicles.toLocaleString()} vehicles ready to review`
-              : "Inventory results"}
-          </h2>
+          <p className="inventory-panel-label">{panelLabel}</p>
+          <h2>{title}</h2>
         </div>
         <div className="inventory-results-meta">
+          <div className="inventory-results-controls">
+            <button
+              aria-controls={filterPanelId}
+              aria-expanded={filtersOpen}
+              className={`inventory-filter-toggle ${filtersOpen ? "is-active" : ""}`}
+              type="button"
+              onClick={onToggleFilters}
+            >
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </button>
+          </div>
           <label className="inventory-results-sort">
-            <span className="inventory-results-sort-label">Sort by</span>
+            <span className="inventory-results-sort-label">{sortLabel}</span>
             <select
               className="inventory-results-sort-select"
               value={sortOptionId}
@@ -72,7 +92,14 @@ export default function InventoryResults({
         </div>
       </header>
 
+      {filtersPanel}
+
       {errorMessage ? <div className="inventory-feedback error">{errorMessage}</div> : null}
+      {watchMutationErrorMessage ? (
+        <div className="inventory-inline-message" role="status">
+          {watchMutationErrorMessage}
+        </div>
+      ) : null}
 
       {isBootstrapping || isInitialLoading ? <LoadingCards /> : null}
 
@@ -82,6 +109,9 @@ export default function InventoryResults({
             <VehicleCard
               key={vehicle.id}
               onSelect={onSelectVehicle}
+              onToggleWatch={onToggleWatch}
+              showWatchToggle={watchToggleEnabled}
+              watchTogglePending={pendingWatchVehicleIds.includes(vehicle.id)}
               vehicle={vehicle}
             />
           ))}
@@ -89,7 +119,7 @@ export default function InventoryResults({
       ) : null}
 
       {showEmptyState ? (
-        <div className="inventory-feedback empty">No vehicles match your criteria.</div>
+        <div className="inventory-feedback empty">{emptyStateMessage}</div>
       ) : null}
 
       {!showEmptyState && vehicles.length > 0 ? (

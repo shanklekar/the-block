@@ -257,6 +257,7 @@ class VehicleSearchRequest(BaseModel):
     criteria: FilterCriteria = Field(default_factory=FilterCriteria)
     sort_by: SortField = SortField.AUCTION_START
     sort_direction: SortDirection = SortDirection.ASC
+    user_id: int | None = Field(default=None, ge=0)
 
 
 class VehicleResponse(BaseModel):
@@ -293,6 +294,14 @@ class VehicleResponse(BaseModel):
     bid_count: int
 
 
+class VehicleSearchResult(VehicleResponse):
+    is_watched: bool = False
+
+
+class VehicleDetailResponse(VehicleResponse):
+    is_watched: bool = False
+
+
 class VehicleSearchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -300,7 +309,22 @@ class VehicleSearchResponse(BaseModel):
     limit: int
     offset: int
     total: int
-    vehicles: list[VehicleResponse]
+    vehicles: list[VehicleSearchResult]
+
+
+class WatchingMutationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vehicle_id: str = Field(min_length=1)
+    watch: bool
+
+
+class WatchingMutationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    vehicle_id: str
+    is_watched: bool
 
 
 class NumericMetadata(BaseModel):

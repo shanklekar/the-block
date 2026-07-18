@@ -4,8 +4,15 @@ import {
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
+import WatchToggleButton from "./WatchToggleButton";
 
-export default function VehicleCard({ onSelect, vehicle }) {
+export default function VehicleCard({
+  onSelect,
+  onToggleWatch,
+  showWatchToggle = false,
+  vehicle,
+  watchTogglePending = false,
+}) {
   const primaryImage =
     vehicle.images[0] ??
     "https://placehold.co/800x600/1a1a2e/eaeaea?text=Vehicle+Image";
@@ -13,6 +20,10 @@ export default function VehicleCard({ onSelect, vehicle }) {
     .filter(Boolean)
     .join(" ");
   const vehicleGrade = formatConditionGrade(vehicle.condition_grade);
+  const isWatched = Boolean(vehicle.is_watched);
+  const watchToggleLabel = isWatched
+    ? `Remove ${vehicleTitle} from watchlist`
+    : `Add ${vehicleTitle} to watchlist`;
 
   return (
     <article
@@ -34,6 +45,17 @@ export default function VehicleCard({ onSelect, vehicle }) {
           loading="lazy"
           src={primaryImage}
         />
+        {showWatchToggle ? (
+          <WatchToggleButton
+            disabled={watchTogglePending}
+            isWatched={isWatched}
+            label={watchToggleLabel}
+            onToggle={(event) => {
+              event.stopPropagation();
+              onToggleWatch?.(vehicle.id, !isWatched);
+            }}
+          />
+        ) : null}
         <div className="vehicle-card-badge-row">
           <span className="vehicle-card-badge">{vehicle.title_status ?? "Untitled"}</span>
           <span className="vehicle-card-badge">{vehicleGrade}</span>
