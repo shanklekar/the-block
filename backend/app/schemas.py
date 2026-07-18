@@ -346,6 +346,35 @@ class PurchaseMutationResponse(BaseModel):
     is_purchased: bool
 
 
+class BidPlacementRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount: float = Field(gt=0)
+
+
+class BidPlacementResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    vehicle_id: str
+    amount: float
+    current_bid: float
+    bid_count: int
+    bid_placed_at: str
+
+
+class BiddingStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vehicle_id: str
+    auction_started: bool
+    is_sold: bool
+    current_bid: float | None = None
+    starting_bid: float | None = None
+    bid_count: int
+    minimum_next_bid: float
+
+
 class NumericMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

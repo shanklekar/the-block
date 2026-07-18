@@ -4,6 +4,8 @@ import {
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
+import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
+import BidNowButton from "./BidNowButton";
 import BuyNowButton from "./BuyNowButton";
 import WatchToggleButton from "./WatchToggleButton";
 
@@ -26,30 +28,50 @@ function DetailSection({ title, children }) {
 }
 
 export default function VehicleDetailsModal({
+  apiBaseUrl = "",
+  currentUserId = null,
   errorMessage,
   isPurchased = false,
   isLoading,
   purchaseMessage = "",
   isWatchPending = false,
   onBuyNow,
+  onRequestBid,
   onClose,
   onOpenImage,
   onToggleWatch,
   vehicle,
   watchErrorMessage = "",
 }) {
-  const vehicleTitle = vehicle
-    ? [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+  const { biddingState, canBid, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
+    apiBaseUrl,
+    enabled: Boolean(vehicle),
+    fetchInitialState: true,
+    userId: currentUserId,
+    vehicle,
+  });
+  const displayVehicle = liveVehicle ?? vehicle;
+  const vehicleTitle = displayVehicle
+    ? [displayVehicle.year, displayVehicle.make, displayVehicle.model, displayVehicle.trim]
         .filter(Boolean)
         .join(" ")
     : "Vehicle details";
-  const summaryPrice = vehicle?.current_bid ?? vehicle?.starting_bid;
-  const leadImageUrl = vehicle?.images[0] ?? "";
-  const isWatched = Boolean(vehicle?.is_watched);
+  const summaryPrice = displayVehicle?.current_bid ?? displayVehicle?.starting_bid;
+  const leadImageUrl = displayVehicle?.images[0] ?? "";
+  const isWatched = Boolean(displayVehicle?.is_watched);
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
     : `Add ${vehicleTitle} to watchlist`;
-  const canBuyNow = Number(vehicle?.buy_now_price) > 0;
+  const vehicleIsPurchased = Boolean(
+    isPurchased || displayVehicle?.is_purchased || biddingState?.is_sold,
+  );
+  const canBuyNow = Number(displayVehicle?.buy_now_price) > 0 && !vehicleIsPurchased;
+  const minimumNextBid = biddingState?.minimum_next_bid ?? null;
+  const bidStatusMessage = biddingState && !biddingState.auction_started
+    ? "Auction has not started yet."
+    : vehicleIsPurchased
+      ? "This vehicle has already been sold."
+      : "";
 
   return (
     <div className="modal-shell vehicle-detail-shell" role="dialog" aria-modal="true">
@@ -73,7 +95,7 @@ export default function VehicleDetailsModal({
           <div className="vehicle-detail-feedback error">{errorMessage}</div>
         ) : null}
 
-        {!isLoading && !errorMessage && vehicle ? (
+        {!isLoading && !errorMessage && displayVehicle ? (
           <div className="vehicle-detail-content">
             <section className="vehicle-detail-top">
               {leadImageUrl ? (
@@ -84,10 +106,10 @@ export default function VehicleDetailsModal({
                 >
                   <div className="vehicle-detail-hero-badges">
                     <span className="vehicle-detail-hero-badge">
-                      {vehicle.title_status ?? "N/A"}
+                      {displayVehicle.title_status ?? "N/A"}
                     </span>
                     <span className="vehicle-detail-hero-badge">
-                      Grade {formatConditionGrade(vehicle.condition_grade)}
+                      Grade {formatConditionGrade(displayVehicle.condition_grade)}
                     </span>
                   </div>
                   <img
@@ -99,19 +121,29 @@ export default function VehicleDetailsModal({
               ) : null}
 
               <div className="vehicle-detail-summary-stack">
-                {canBuyNow ? (
-                  <BuyNowButton
-                    className="vehicle-buy-now-detail"
-                    isPurchased={isPurchased}
-                    price={vehicle.buy_now_price}
-                    onClick={() => onBuyNow?.(vehicle)}
-                  />
-                ) : null}
+                <div className="vehicle-detail-action-stack">
+                  {canBid && minimumNextBid ? (
+                    <BidNowButton
+                      amount={minimumNextBid}
+                      className="vehicle-bid-now-detail"
+                      onClick={() => onRequestBid?.(displayVehicle)}
+                    />
+                  ) : null}
+
+                  {canBuyNow ? (
+                    <BuyNowButton
+                      className="vehicle-buy-now-detail"
+                      isPurchased={vehicleIsPurchased}
+                      price={displayVehicle.buy_now_price}
+                      onClick={() => onBuyNow?.(displayVehicle)}
+                    />
+                  ) : null}
+                </div>
 
                 <div className="vehicle-detail-summary">
                   <div className="vehicle-detail-summary-primary">
                     <div className="vehicle-detail-summary-pills">
-                      <span>{formatMilesFromKm(vehicle.odometer_km)}</span>
+                      <span>{formatMilesFromKm(displayVehicle.odometer_km)}</span>
                     </div>
                     <div className="vehicle-detail-summary-actions">
                       <WatchToggleButton
@@ -130,20 +162,30 @@ export default function VehicleDetailsModal({
                     </div>
                     <div>
                       <dt>Auction</dt>
-                      <dd>{formatAuctionDate(vehicle.auction_start)}</dd>
+                      <dd>{formatAuctionDate(displayVehicle.auction_start)}</dd>
                     </div>
                     <div>
                       <dt>Starting bid</dt>
-                      <dd>{formatCurrency(vehicle.starting_bid)}</dd>
+                      <dd>{formatCurrency(displayVehicle.starting_bid)}</dd>
                     </div>
                     <div>
                       <dt>Bid count</dt>
-                      <dd>{vehicle.bid_count.toLocaleString()}</dd>
+                      <dd>{displayVehicle.bid_count.toLocaleString()}</dd>
                     </div>
                   </dl>
                   {watchErrorMessage ? (
                     <div className="vehicle-detail-inline-message" role="status">
                       {watchErrorMessage}
+                    </div>
+                  ) : null}
+                  {stateErrorMessage ? (
+                    <div className="vehicle-detail-inline-message" role="status">
+                      {stateErrorMessage}
+                    </div>
+                  ) : null}
+                  {bidStatusMessage ? (
+                    <div className="vehicle-detail-inline-message" role="status">
+                      {bidStatusMessage}
                     </div>
                   ) : null}
                   {purchaseMessage ? (
@@ -158,25 +200,52 @@ export default function VehicleDetailsModal({
             <div className="vehicle-detail-sections">
               <DetailSection title="Vehicle specs">
                 <dl className="vehicle-detail-grid">
-                  <DetailItem label="Body style" value={vehicle.body_style ?? "N/A"} />
-                  <DetailItem label="Exterior color" value={vehicle.exterior_color ?? "N/A"} />
-                  <DetailItem label="Interior color" value={vehicle.interior_color ?? "N/A"} />
-                  <DetailItem label="Engine" value={vehicle.engine ?? "N/A"} />
-                  <DetailItem label="Transmission" value={vehicle.transmission ?? "N/A"} />
-                  <DetailItem label="Drivetrain" value={vehicle.drivetrain ?? "N/A"} />
-                  <DetailItem label="Fuel type" value={vehicle.fuel_type ?? "N/A"} />
-                  <DetailItem label="Odometer" value={formatMilesFromKm(vehicle.odometer_km)} />
+                  <DetailItem label="Body style" value={displayVehicle.body_style ?? "N/A"} />
+                  <DetailItem
+                    label="Exterior color"
+                    value={displayVehicle.exterior_color ?? "N/A"}
+                  />
+                  <DetailItem
+                    label="Interior color"
+                    value={displayVehicle.interior_color ?? "N/A"}
+                  />
+                  <DetailItem label="Engine" value={displayVehicle.engine ?? "N/A"} />
+                  <DetailItem
+                    label="Transmission"
+                    value={displayVehicle.transmission ?? "N/A"}
+                  />
+                  <DetailItem label="Drivetrain" value={displayVehicle.drivetrain ?? "N/A"} />
+                  <DetailItem label="Fuel type" value={displayVehicle.fuel_type ?? "N/A"} />
+                  <DetailItem
+                    label="Odometer"
+                    value={formatMilesFromKm(displayVehicle.odometer_km)}
+                  />
                 </dl>
               </DetailSection>
 
               <DetailSection title="Auction and pricing">
                 <dl className="vehicle-detail-grid">
-                  <DetailItem label="Starting bid" value={formatCurrency(vehicle.starting_bid)} />
-                  <DetailItem label="Current bid" value={formatCurrency(vehicle.current_bid)} />
-                  <DetailItem label="Reserve price" value={formatCurrency(vehicle.reserve_price)} />
-                  <DetailItem label="Buy now price" value={formatCurrency(vehicle.buy_now_price)} />
-                  <DetailItem label="Bid count" value={vehicle.bid_count.toLocaleString()} />
-                  <DetailItem label="Auction start" value={formatAuctionDate(vehicle.auction_start)} />
+                  <DetailItem
+                    label="Starting bid"
+                    value={formatCurrency(displayVehicle.starting_bid)}
+                  />
+                  <DetailItem label="Current bid" value={formatCurrency(summaryPrice)} />
+                  <DetailItem
+                    label="Reserve price"
+                    value={formatCurrency(displayVehicle.reserve_price)}
+                  />
+                  <DetailItem
+                    label="Buy now price"
+                    value={formatCurrency(displayVehicle.buy_now_price)}
+                  />
+                  <DetailItem
+                    label="Bid count"
+                    value={displayVehicle.bid_count.toLocaleString()}
+                  />
+                  <DetailItem
+                    label="Auction start"
+                    value={formatAuctionDate(displayVehicle.auction_start)}
+                  />
                 </dl>
               </DetailSection>
 
@@ -184,18 +253,18 @@ export default function VehicleDetailsModal({
                 <dl className="vehicle-detail-grid">
                   <DetailItem
                     label="Condition grade"
-                    value={formatConditionGrade(vehicle.condition_grade)}
+                    value={formatConditionGrade(displayVehicle.condition_grade)}
                   />
-                  <DetailItem label="Title status" value={vehicle.title_status ?? "N/A"} />
+                  <DetailItem label="Title status" value={displayVehicle.title_status ?? "N/A"} />
                 </dl>
                 <p className="vehicle-detail-copy">
-                  {vehicle.condition_report ?? "Condition report unavailable."}
+                  {displayVehicle.condition_report ?? "Condition report unavailable."}
                 </p>
                 <div className="vehicle-detail-damage">
                   <h4>Damage notes</h4>
-                  {vehicle.damage_notes.length ? (
+                  {displayVehicle.damage_notes.length ? (
                     <ul className="vehicle-detail-list">
-                      {vehicle.damage_notes.map((note) => (
+                      {displayVehicle.damage_notes.map((note) => (
                         <li key={note}>{note}</li>
                       ))}
                     </ul>
@@ -209,13 +278,13 @@ export default function VehicleDetailsModal({
                 <dl className="vehicle-detail-grid">
                   <DetailItem
                     label="Selling dealership"
-                    value={vehicle.selling_dealership ?? "N/A"}
+                    value={displayVehicle.selling_dealership ?? "N/A"}
                   />
-                  <DetailItem label="Lot" value={vehicle.lot ?? "N/A"} />
-                  <DetailItem label="City" value={vehicle.city ?? "N/A"} />
-                  <DetailItem label="Province" value={vehicle.province ?? "N/A"} />
-                  <DetailItem label="VIN" value={vehicle.vin} />
-                  <DetailItem label="Vehicle ID" value={vehicle.id} />
+                  <DetailItem label="Lot" value={displayVehicle.lot ?? "N/A"} />
+                  <DetailItem label="City" value={displayVehicle.city ?? "N/A"} />
+                  <DetailItem label="Province" value={displayVehicle.province ?? "N/A"} />
+                  <DetailItem label="VIN" value={displayVehicle.vin} />
+                  <DetailItem label="Vehicle ID" value={displayVehicle.id} />
                 </dl>
               </DetailSection>
             </div>
@@ -227,13 +296,13 @@ export default function VehicleDetailsModal({
                   <h3>Full image set</h3>
                 </div>
                 <span className="inventory-results-pill">
-                  {vehicle.images.length.toLocaleString()} images
+                  {displayVehicle.images.length.toLocaleString()} images
                 </span>
               </div>
 
-              {vehicle.images.length ? (
+              {displayVehicle.images.length ? (
                 <div className="vehicle-detail-gallery-stack">
-                  {vehicle.images.map((imageUrl, index) => (
+                  {displayVehicle.images.map((imageUrl, index) => (
                     <button
                       className="vehicle-detail-gallery-button"
                       key={`${imageUrl}-${index}`}

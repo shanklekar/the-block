@@ -5,11 +5,11 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Path, Query, Request
+from fastapi import FastAPI, HTTPException, Path, Query, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
 
 from .database import (
     get_auction_start_offset,
@@ -21,6 +21,9 @@ from .schemas import (
     DATETIME_FIELDS,
     NUMERIC_FIELDS,
     TEXT_FIELDS,
+    BidPlacementRequest,
+    BidPlacementResponse,
+    BiddingStateResponse,
     FilterCriteria,
     FilterOperator,
     FilterRule,
@@ -59,6 +62,44 @@ if not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger("the_block.api")
+
+BID_INCREMENT = 100.0
+
+
+class VehicleBiddingConnectionManager:
+    def __init__(self) -> None:
+        self._connections: dict[str, set[WebSocket]] = {}
+
+    async def connect(self, vehicle_id: str, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._connections.setdefault(vehicle_id, set()).add(websocket)
+
+    def disconnect(self, vehicle_id: str, websocket: WebSocket) -> None:
+        subscribers = self._connections.get(vehicle_id)
+        if not subscribers:
+            return
+
+        subscribers.discard(websocket)
+        if not subscribers:
+            self._connections.pop(vehicle_id, None)
+
+    async def broadcast(self, vehicle_id: str, snapshot: BiddingStateResponse) -> None:
+        subscribers = list(self._connections.get(vehicle_id, ()))
+        if not subscribers:
+            return
+
+        disconnected: list[WebSocket] = []
+        for websocket in subscribers:
+            try:
+                await websocket.send_json(snapshot.model_dump())
+            except Exception:
+                disconnected.append(websocket)
+
+        for websocket in disconnected:
+            self.disconnect(vehicle_id, websocket)
+
+
+bidding_connection_manager = VehicleBiddingConnectionManager()
 
 
 FILTER_METADATA_FIELDS = {
@@ -249,6 +290,111 @@ def _get_vehicle_buy_now_price(
         [vehicle_id],
     ).fetchone()
     return None if row is None else row["buy_now_price"]
+
+
+def _parse_datetime_value(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _is_vehicle_sold(connection: sqlite3.Connection, vehicle_id: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM purchased WHERE vehicle_id = ? LIMIT 1",
+        [vehicle_id],
+    ).fetchone()
+    return row is not None
+
+
+def _get_vehicle_bidding_row(
+    connection: sqlite3.Connection,
+    vehicle_id: str,
+) -> sqlite3.Row | None:
+    return connection.execute(
+        """
+        SELECT
+            vehicles.id,
+            vehicles.auction_start,
+            vehicles.starting_bid,
+            vehicles.current_bid,
+            vehicles.bid_count,
+            EXISTS (
+                SELECT 1
+                FROM purchased
+                WHERE purchased.vehicle_id = vehicles.id
+            ) AS is_sold
+        FROM vehicles
+        WHERE vehicles.id = ?
+        LIMIT 1
+        """,
+        [vehicle_id],
+    ).fetchone()
+
+
+def _get_active_bid_base(row: sqlite3.Row) -> float:
+    current_bid = row["current_bid"]
+    starting_bid = row["starting_bid"]
+
+    if current_bid is not None:
+        return float(current_bid)
+
+    if starting_bid is not None:
+        return float(starting_bid)
+
+    return 0.0
+
+
+def _is_auction_started(
+    auction_start: str | None,
+    auction_start_offset: timedelta,
+) -> bool:
+    shifted_auction_start = shift_auction_start(auction_start, auction_start_offset)
+    normalized_auction_start = _parse_datetime_value(shifted_auction_start)
+
+    if normalized_auction_start is None:
+        return False
+
+    return normalized_auction_start <= datetime.now()
+
+
+def _build_bidding_state_response(
+    row: sqlite3.Row,
+    auction_start_offset: timedelta,
+) -> BiddingStateResponse:
+    active_bid_base = _get_active_bid_base(row)
+    return BiddingStateResponse(
+        vehicle_id=row["id"],
+        auction_started=_is_auction_started(row["auction_start"], auction_start_offset),
+        is_sold=bool(row["is_sold"]),
+        current_bid=row["current_bid"],
+        starting_bid=row["starting_bid"],
+        bid_count=row["bid_count"],
+        minimum_next_bid=active_bid_base + BID_INCREMENT,
+    )
+
+
+def _load_bidding_state(
+    connection: sqlite3.Connection,
+    vehicle_id: str,
+) -> BiddingStateResponse:
+    auction_start_offset = get_auction_start_offset(connection)
+    row = _get_vehicle_bidding_row(connection, vehicle_id)
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    return _build_bidding_state_response(row, auction_start_offset)
+
+
+async def _broadcast_bidding_state(vehicle_id: str) -> None:
+    with get_connection() as connection:
+        snapshot = _load_bidding_state(connection, vehicle_id)
+
+    await bidding_connection_manager.broadcast(vehicle_id, snapshot)
 
 
 def _build_is_watched_select(user_id: int | None) -> tuple[str, list[Any]]:
@@ -616,11 +762,151 @@ def mutate_watching(
     )
 
 
+@app.get(
+    "/api/vehicles/{vehicle_id}/bidding-state",
+    response_model=BiddingStateResponse,
+)
+def get_vehicle_bidding_state(
+    vehicle_id: str,
+    user_id: int = Query(..., ge=0),
+) -> BiddingStateResponse:
+    with get_connection() as connection:
+        if not _user_exists(connection, user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return _load_bidding_state(connection, vehicle_id)
+
+
+@app.post(
+    "/api/users/{user_id}/vehicles/{vehicle_id}/bids",
+    response_model=BidPlacementResponse,
+)
+async def place_bid(
+    payload: BidPlacementRequest,
+    user_id: int = Path(..., ge=0),
+    vehicle_id: str = Path(..., min_length=1),
+) -> BidPlacementResponse:
+    bid_placed_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_connection() as connection:
+        if not _user_exists(connection, user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            auction_start_offset = get_auction_start_offset(connection)
+            row = _get_vehicle_bidding_row(connection, vehicle_id)
+
+            if row is None:
+                raise HTTPException(status_code=404, detail="Vehicle not found")
+
+            bidding_state = _build_bidding_state_response(row, auction_start_offset)
+            if bidding_state.is_sold:
+                raise HTTPException(status_code=409, detail="Vehicle has already been sold")
+            if not bidding_state.auction_started:
+                raise HTTPException(status_code=409, detail="Auction has not started")
+            if payload.amount < bidding_state.minimum_next_bid:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Bid amount must be at least the minimum next bid",
+                )
+
+            next_bid_count = int(row["bid_count"]) + 1
+            connection.execute(
+                """
+                INSERT INTO bids (
+                    vehicle_id,
+                    user_id,
+                    current_bid,
+                    bid_placed_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                [vehicle_id, user_id, payload.amount, bid_placed_at],
+            )
+            connection.execute(
+                """
+                UPDATE vehicles
+                SET current_bid = ?, bid_count = ?
+                WHERE id = ?
+                """,
+                [payload.amount, next_bid_count, vehicle_id],
+            )
+            connection.commit()
+        except HTTPException:
+            connection.rollback()
+            raise
+        except sqlite3.Error:
+            connection.rollback()
+            raise
+
+    response = BidPlacementResponse(
+        user_id=user_id,
+        vehicle_id=vehicle_id,
+        amount=payload.amount,
+        current_bid=payload.amount,
+        bid_count=next_bid_count,
+        bid_placed_at=bid_placed_at,
+    )
+    await _broadcast_bidding_state(vehicle_id)
+    return response
+
+
+@app.websocket("/ws/vehicles/{vehicle_id}/bidding")
+async def vehicle_bidding_stream(
+    websocket: WebSocket,
+    vehicle_id: str,
+    user_id: int = Query(..., ge=0),
+) -> None:
+    with get_connection() as connection:
+        if not _user_exists(connection, user_id):
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="User not found",
+            )
+            return
+
+        row = _get_vehicle_bidding_row(connection, vehicle_id)
+        if row is None:
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Vehicle not found",
+            )
+            return
+
+        snapshot = _build_bidding_state_response(
+            row,
+            get_auction_start_offset(connection),
+        )
+        if snapshot.is_sold:
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Vehicle already sold",
+            )
+            return
+        if not snapshot.auction_started:
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Auction has not started",
+            )
+            return
+
+    await bidding_connection_manager.connect(vehicle_id, websocket)
+
+    try:
+        await websocket.send_json(snapshot.model_dump())
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        bidding_connection_manager.disconnect(vehicle_id, websocket)
+
+
 @app.post(
     "/api/users/{user_id}/purchased",
     response_model=PurchaseMutationResponse,
 )
-def mutate_purchased(
+async def mutate_purchased(
     payload: PurchaseMutationRequest,
     user_id: int = Path(..., ge=0),
 ) -> PurchaseMutationResponse:
@@ -664,14 +950,15 @@ def mutate_purchased(
                 vehicle_id=payload.vehicle_id,
             )
             connection.commit()
-
-            return PurchaseMutationResponse(
+            response = PurchaseMutationResponse(
                 user_id=existing_purchase["user_id"],
                 vehicle_id=existing_purchase["vehicle_id"],
                 purchase_amount=existing_purchase["purchase_amount"],
                 purchase_date=existing_purchase["purchase_date"],
                 is_purchased=True,
             )
+            await _broadcast_bidding_state(payload.vehicle_id)
+            return response
 
         try:
             _ensure_vehicle_is_watched(
@@ -716,22 +1003,25 @@ def mutate_purchased(
                 vehicle_id=payload.vehicle_id,
             )
             connection.commit()
-
-            return PurchaseMutationResponse(
+            response = PurchaseMutationResponse(
                 user_id=existing_purchase["user_id"],
                 vehicle_id=existing_purchase["vehicle_id"],
                 purchase_amount=existing_purchase["purchase_amount"],
                 purchase_date=existing_purchase["purchase_date"],
                 is_purchased=True,
             )
+            await _broadcast_bidding_state(payload.vehicle_id)
+            return response
 
-    return PurchaseMutationResponse(
+    response = PurchaseMutationResponse(
         user_id=user_id,
         vehicle_id=payload.vehicle_id,
         purchase_amount=payload.buy_now_price,
         purchase_date=purchase_date,
         is_purchased=True,
     )
+    await _broadcast_bidding_state(payload.vehicle_id)
+    return response
 
 
 @app.get("/api/vehicles/{vehicle_id}", response_model=VehicleDetailResponse)

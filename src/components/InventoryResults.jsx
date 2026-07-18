@@ -20,8 +20,11 @@ function LoadingCards() {
 }
 
 export default function InventoryResults({
+  apiBaseUrl = "",
   activeFilterCount,
+  currentUserId = null,
   emptyStateMessage = "No vehicles match your criteria.",
+  enableLiveBidding = false,
   errorMessage,
   filterPanelId,
   filtersOpen,
@@ -31,6 +34,7 @@ export default function InventoryResults({
   isInitialLoading,
   isLoadingMore,
   onRequestBuyNow,
+  onRequestBid,
   onSelectVehicle,
   onSortChange,
   onToggleWatch,
@@ -109,9 +113,13 @@ export default function InventoryResults({
         <div className="vehicle-grid">
           {vehicles.map((vehicle) => (
             <VehicleCard
+              apiBaseUrl={apiBaseUrl}
+              currentUserId={currentUserId}
+              enableLiveBidding={enableLiveBidding}
               isPurchased={Boolean(vehicle.is_purchased || purchasedVehicleIds[vehicle.id])}
               key={vehicle.id}
               onBuyNow={onRequestBuyNow}
+              onRequestBid={onRequestBid}
               onSelect={onSelectVehicle}
               onToggleWatch={onToggleWatch}
               showWatchToggle={watchToggleEnabled}

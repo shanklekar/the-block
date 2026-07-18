@@ -58,9 +58,11 @@ function filterHiddenVehicles(vehicles, hiddenVehicleIds) {
 }
 
 export default function InventorySection({
+  apiBaseUrl = "",
   bootstrapErrorMessage,
   currentUserId = null,
   enableWatchToggle = false,
+  enableLiveBidding = false,
   filterMetadata,
   filterSchema,
   filterPanelId,
@@ -79,6 +81,7 @@ export default function InventorySection({
   emptyStateMessage,
   hiddenVehicleIds = {},
   watchMutationEndpoint = "",
+  onRequestBid,
 }) {
   const [filters, setFilters] = useState(createDefaultFilters);
   const [vehicles, setVehicles] = useState([]);
@@ -452,8 +455,11 @@ export default function InventorySection({
 
   return (
     <InventoryResults
+      apiBaseUrl={apiBaseUrl}
       activeFilterCount={activeFilterCount}
+      currentUserId={currentUserId}
       emptyStateMessage={emptyStateMessage}
+      enableLiveBidding={enableLiveBidding}
       errorMessage={displayErrorMessage}
       filterPanelId={filterPanelId}
       filtersOpen={filtersOpen}
@@ -481,6 +487,7 @@ export default function InventorySection({
       isInitialLoading={isInitialLoading}
       isLoadingMore={isLoadingMore}
       onRequestBuyNow={onRequestBuyNow}
+      onRequestBid={onRequestBid}
       onSelectVehicle={onSelectVehicle}
       onSortChange={setSortOptionId}
       onToggleWatch={handleToggleWatch}

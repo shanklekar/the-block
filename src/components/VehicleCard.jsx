@@ -4,39 +4,60 @@ import {
   formatCurrency,
   formatMilesFromKm,
 } from "../inventoryConfig";
+import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
+import BidNowButton from "./BidNowButton";
 import BuyNowButton from "./BuyNowButton";
 import WatchToggleButton from "./WatchToggleButton";
 
 export default function VehicleCard({
+  apiBaseUrl = "",
+  currentUserId = null,
+  enableLiveBidding = false,
   isPurchased = false,
   onBuyNow,
+  onRequestBid,
   onSelect,
   onToggleWatch,
   showWatchToggle = false,
   vehicle,
   watchTogglePending = false,
 }) {
+  const { biddingState, canBid, liveVehicle } = useVehicleLiveBidding({
+    apiBaseUrl,
+    enabled: enableLiveBidding,
+    userId: currentUserId,
+    vehicle,
+  });
+  const displayVehicle = liveVehicle ?? vehicle;
   const primaryImage =
-    vehicle.images[0] ??
+    displayVehicle.images[0] ??
     "https://placehold.co/800x600/1a1a2e/eaeaea?text=Vehicle+Image";
-  const vehicleTitle = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+  const vehicleTitle = [
+    displayVehicle.year,
+    displayVehicle.make,
+    displayVehicle.model,
+    displayVehicle.trim,
+  ]
     .filter(Boolean)
     .join(" ");
-  const vehicleGrade = formatConditionGrade(vehicle.condition_grade);
-  const isWatched = Boolean(vehicle.is_watched);
+  const vehicleGrade = formatConditionGrade(displayVehicle.condition_grade);
+  const isWatched = Boolean(displayVehicle.is_watched);
   const watchToggleLabel = isWatched
     ? `Remove ${vehicleTitle} from watchlist`
     : `Add ${vehicleTitle} to watchlist`;
-  const canBuyNow = Number(vehicle.buy_now_price) > 0;
+  const vehicleIsPurchased = Boolean(isPurchased || displayVehicle.is_purchased);
+  const canBuyNow = Number(displayVehicle.buy_now_price) > 0 && !vehicleIsPurchased;
+  const minimumNextBid = biddingState?.minimum_next_bid ?? null;
+  const showBidButton = enableLiveBidding && canBid && !vehicleIsPurchased && minimumNextBid;
 
   return (
     <article
       className="vehicle-card"
-      onClick={() => onSelect(vehicle.id)}
+      onClick={() => onSelect(displayVehicle.id)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onSelect(vehicle.id);
+          onSelect(displayVehicle.id);
         }
       }}
       role="button"
@@ -56,12 +77,14 @@ export default function VehicleCard({
             label={watchToggleLabel}
             onToggle={(event) => {
               event.stopPropagation();
-              onToggleWatch?.(vehicle.id, !isWatched);
+              onToggleWatch?.(displayVehicle.id, !isWatched);
             }}
           />
         ) : null}
         <div className="vehicle-card-badge-row">
-          <span className="vehicle-card-badge">{vehicle.title_status ?? "Untitled"}</span>
+          <span className="vehicle-card-badge">
+            {displayVehicle.title_status ?? "Untitled"}
+          </span>
           <span className="vehicle-card-badge">{vehicleGrade}</span>
         </div>
       </div>
@@ -75,23 +98,39 @@ export default function VehicleCard({
         <dl className="vehicle-card-specs">
           <div>
             <dt>Trim</dt>
-            <dd>{vehicle.trim ?? "N/A"}</dd>
+            <dd>{displayVehicle.trim ?? "N/A"}</dd>
           </div>
           <div>
             <dt>Location</dt>
             <dd>
-              {vehicle.city ?? "Unknown"}, {vehicle.province ?? "N/A"}
+              {displayVehicle.city ?? "Unknown"}, {displayVehicle.province ?? "N/A"}
             </dd>
           </div>
           <div>
             <dt>Current bid</dt>
-            <dd>{formatCurrency(vehicle.current_bid ?? vehicle.starting_bid)}</dd>
+            <dd>{formatCurrency(displayVehicle.current_bid ?? displayVehicle.starting_bid)}</dd>
           </div>
           <div>
             <dt>Auction</dt>
-            <dd>{formatAuctionDate(vehicle.auction_start)}</dd>
+            <dd>{formatAuctionDate(displayVehicle.auction_start)}</dd>
           </div>
         </dl>
+
+        {showBidButton ? (
+          <div
+            className="vehicle-card-bid-now"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <BidNowButton
+              amount={minimumNextBid}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestBid?.(displayVehicle);
+              }}
+            />
+          </div>
+        ) : null}
 
         {canBuyNow ? (
           <div
@@ -100,11 +139,11 @@ export default function VehicleCard({
             onKeyDown={(event) => event.stopPropagation()}
           >
             <BuyNowButton
-              isPurchased={isPurchased}
-              price={vehicle.buy_now_price}
+              isPurchased={vehicleIsPurchased}
+              price={displayVehicle.buy_now_price}
               onClick={(event) => {
                 event.stopPropagation();
-                onBuyNow?.(vehicle);
+                onBuyNow?.(displayVehicle);
               }}
             />
           </div>
