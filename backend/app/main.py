@@ -5,7 +5,7 @@ import sqlite3
 from datetime import timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Path, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -197,6 +197,78 @@ def build_order_clause(sort_by: SortField, sort_direction: SortDirection) -> str
     )
 
 
+def _combine_where_clauses(*clauses: tuple[str, list[Any]]) -> tuple[str, list[Any]]:
+    conditions: list[str] = []
+    parameters: list[Any] = []
+
+    for clause, values in clauses:
+        if not clause:
+            continue
+
+        normalized_clause = clause.removeprefix("WHERE ").strip()
+        if not normalized_clause:
+            continue
+
+        conditions.append(f"({normalized_clause})")
+        parameters.extend(values)
+
+    if not conditions:
+        return "", []
+
+    return f"WHERE {' AND '.join(conditions)}", parameters
+
+
+def _build_vehicle_search_response(
+    payload: VehicleSearchRequest,
+    *,
+    extra_clause: tuple[str, list[Any]] | None = None,
+) -> VehicleSearchResponse:
+    with get_connection() as connection:
+        auction_start_offset = get_auction_start_offset(connection)
+        translated_criteria = _translate_criteria_to_stored_timeline(
+            payload.criteria,
+            auction_start_offset,
+        )
+        criteria_clause = build_where_clause(translated_criteria)
+        where_clause, parameters = _combine_where_clauses(
+            extra_clause or ("", []),
+            criteria_clause,
+        )
+        order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
+        query = f"""
+            SELECT *
+            FROM vehicles
+            {where_clause}
+            {order_clause}
+            LIMIT ?
+            OFFSET ?
+        """
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM vehicles
+            {where_clause}
+        """
+        total_row = connection.execute(count_query, parameters).fetchone()
+        rows = connection.execute(
+            query,
+            [*parameters, payload.limit, payload.offset],
+        ).fetchall()
+
+    vehicles = [
+        VehicleResponse(
+            **serialize_vehicle(row, auction_start_offset=auction_start_offset)
+        )
+        for row in rows
+    ]
+    return VehicleSearchResponse(
+        count=len(vehicles),
+        limit=payload.limit,
+        offset=payload.offset,
+        total=total_row["total"] if total_row is not None else 0,
+        vehicles=vehicles,
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def request_validation_exception_handler(
     request: Request, exc: RequestValidationError
@@ -360,45 +432,39 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
 
 @app.post("/api/vehicles/search", response_model=VehicleSearchResponse)
 def search_vehicles(payload: VehicleSearchRequest) -> VehicleSearchResponse:
-    with get_connection() as connection:
-        auction_start_offset = get_auction_start_offset(connection)
-        translated_criteria = _translate_criteria_to_stored_timeline(
-            payload.criteria,
-            auction_start_offset,
-        )
-        where_clause, parameters = build_where_clause(translated_criteria)
-        order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
-        query = f"""
-            SELECT *
-            FROM vehicles
-            {where_clause}
-            {order_clause}
-            LIMIT ?
-            OFFSET ?
-        """
-        count_query = f"""
-            SELECT COUNT(*) AS total
-            FROM vehicles
-            {where_clause}
-        """
-        total_row = connection.execute(count_query, parameters).fetchone()
-        rows = connection.execute(
-            query,
-            [*parameters, payload.limit, payload.offset],
-        ).fetchall()
+    return _build_vehicle_search_response(payload)
 
-    vehicles = [
-        VehicleResponse(
-            **serialize_vehicle(row, auction_start_offset=auction_start_offset)
-        )
-        for row in rows
-    ]
-    return VehicleSearchResponse(
-        count=len(vehicles),
-        limit=payload.limit,
-        offset=payload.offset,
-        total=total_row["total"] if total_row is not None else 0,
-        vehicles=vehicles,
+
+@app.post(
+    "/api/users/{user_id}/watching/vehicles/search",
+    response_model=VehicleSearchResponse,
+)
+def search_watched_vehicles(
+    payload: VehicleSearchRequest,
+    user_id: int = Path(..., ge=0),
+) -> VehicleSearchResponse:
+    with get_connection() as connection:
+        user_exists = connection.execute(
+            "SELECT 1 FROM users WHERE user_id = ? LIMIT 1",
+            [user_id],
+        ).fetchone()
+
+    if user_exists is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return _build_vehicle_search_response(
+        payload,
+        extra_clause=(
+            """
+            EXISTS (
+                SELECT 1
+                FROM watching
+                WHERE watching.user_id = ?
+                  AND watching.vehicle_id = vehicles.id
+            )
+            """,
+            [user_id],
+        ),
     )
 
 

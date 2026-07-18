@@ -165,6 +165,7 @@ The API will start on `http://127.0.0.1:8000`.
 - `GET /health`
 - `GET /api/vehicles/filters/schema`
 - `POST /api/vehicles/search`
+- `POST /api/users/{user_id}/watching/vehicles/search`
 - `GET /api/vehicles/{vehicle_id}`
 
 ### Search request format
@@ -207,3 +208,5 @@ The backend does not trust incoming requests:
 - Request bodies reject unexpected properties.
 - All SQL values are bound as query parameters, not interpolated into SQL.
 - Result counts are capped to prevent oversized queries.
+
+`POST /api/users/{user_id}/watching/vehicles/search` accepts the same request body and returns the same paginated response shape as `POST /api/vehicles/search`, but limits results to vehicles present in the `watching` table for the provided `user_id`.
