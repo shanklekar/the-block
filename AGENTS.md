@@ -1,8 +1,8 @@
 # Repo Instructions
 
 ## Project context
-- This repo is a Vite + React app for the OPENLANE "The Block" coding challenge.
-- Prefer frontend-only changes unless the task explicitly requires backend work.
+- This repo includes a frontend React app, a backend Python FastAPI app, and `data/vehicles.sqlite` as part of the project stack for the OPENLANE "The Block" coding challenge.
+- Treat the frontend, backend, and SQLite data layer as first-class parts of the repo when making changes.
 
 ## Coding standards
 - Use React function components and ES modules.
@@ -16,8 +16,8 @@
 - Optimize for inventory browsing, vehicle detail clarity, and bidding flows.
 
 ## Data
-- Use `data/vehicles.json` as the source of truth unless told otherwise.
-- Do not invent new backend APIs unless explicitly requested.
+- Use `data/vehicles.sqlite` as the primary data source unless told otherwise.
+- Prefer working with the existing FastAPI backend rather than inventing new services or APIs unless explicitly requested.
 
 ## Validation
 - After changes, run `npm run build`.
