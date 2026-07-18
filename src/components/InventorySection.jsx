@@ -53,6 +53,10 @@ function countActiveFilters(filters) {
   );
 }
 
+function filterHiddenVehicles(vehicles, hiddenVehicleIds) {
+  return vehicles.filter((vehicle) => !hiddenVehicleIds[vehicle.id]);
+}
+
 export default function InventorySection({
   bootstrapErrorMessage,
   currentUserId = null,
@@ -73,6 +77,7 @@ export default function InventorySection({
   sectionTitle,
   sortLabel,
   emptyStateMessage,
+  hiddenVehicleIds = {},
   watchMutationEndpoint = "",
 }) {
   const [filters, setFilters] = useState(createDefaultFilters);
@@ -115,6 +120,7 @@ export default function InventorySection({
   );
   const displayErrorMessage = errorMessage || bootstrapErrorMessage;
   const shouldIncludeWatchState = enableWatchToggle && currentUserId !== null;
+  const hiddenVehicleIdsKey = JSON.stringify(Object.keys(hiddenVehicleIds).sort());
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -131,6 +137,14 @@ export default function InventorySection({
       requestControllerRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!Object.keys(hiddenVehicleIds).length) {
+      return;
+    }
+
+    setVehicles((currentVehicles) => filterHiddenVehicles(currentVehicles, hiddenVehicleIds));
+  }, [hiddenVehicleIds, hiddenVehicleIdsKey]);
 
   function buildSearchPayload({ criteria, limit, offset, sortDirection, sortBy }) {
     return {
@@ -197,7 +211,7 @@ export default function InventorySection({
           return;
         }
 
-        setVehicles(payload.vehicles);
+        setVehicles(filterHiddenVehicles(payload.vehicles, hiddenVehicleIds));
         setTotalVehicles(payload.total);
         setHasMore(payload.offset + payload.count < payload.total);
       } catch (error) {
@@ -227,6 +241,8 @@ export default function InventorySection({
     searchEndpoint,
     selectedSortOption,
     shouldIncludeWatchState,
+    hiddenVehicleIds,
+    hiddenVehicleIdsKey,
   ]);
 
   useEffect(() => {
@@ -310,7 +326,10 @@ export default function InventorySection({
       }
 
       setVehicles((currentVehicles) =>
-        mergeVehicles(currentVehicles, payload.vehicles),
+        mergeVehicles(
+          currentVehicles,
+          filterHiddenVehicles(payload.vehicles, hiddenVehicleIds),
+        ),
       );
       setTotalVehicles(payload.total);
       setHasMore(payload.offset + payload.count < payload.total);

@@ -1,6 +1,11 @@
 import { formatCurrency } from "../inventoryConfig";
 
-export default function BuyNowConfirmationModal({ onCancel, onConfirm, vehicle }) {
+export default function BuyNowConfirmationModal({
+  isSubmitting = false,
+  onCancel,
+  onConfirm,
+  vehicle,
+}) {
   const vehicleTitle = [vehicle?.year, vehicle?.make, vehicle?.model, vehicle?.trim]
     .filter(Boolean)
     .join(" ");
@@ -19,11 +24,16 @@ export default function BuyNowConfirmationModal({ onCancel, onConfirm, vehicle }
         </div>
 
         <div className="buy-now-confirmation-actions">
-          <button className="buy-now-confirmation-cancel" type="button" onClick={onCancel}>
+          <button
+            className="buy-now-confirmation-cancel"
+            disabled={isSubmitting}
+            type="button"
+            onClick={onCancel}
+          >
             Cancel
           </button>
-          <button className="buy-now-button" type="button" onClick={onConfirm}>
-            Yes
+          <button className="buy-now-button" disabled={isSubmitting} type="button" onClick={onConfirm}>
+            {isSubmitting ? "Purchasing..." : "Yes"}
           </button>
         </div>
       </section>

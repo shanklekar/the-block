@@ -109,7 +109,7 @@ export default function InventoryResults({
         <div className="vehicle-grid">
           {vehicles.map((vehicle) => (
             <VehicleCard
-              isPurchased={Boolean(purchasedVehicleIds[vehicle.id])}
+              isPurchased={Boolean(vehicle.is_purchased || purchasedVehicleIds[vehicle.id])}
               key={vehicle.id}
               onBuyNow={onRequestBuyNow}
               onSelect={onSelectVehicle}

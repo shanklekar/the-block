@@ -29,6 +29,7 @@ export default function VehicleDetailsModal({
   errorMessage,
   isPurchased = false,
   isLoading,
+  purchaseMessage = "",
   isWatchPending = false,
   onBuyNow,
   onClose,
@@ -143,6 +144,11 @@ export default function VehicleDetailsModal({
                   {watchErrorMessage ? (
                     <div className="vehicle-detail-inline-message" role="status">
                       {watchErrorMessage}
+                    </div>
+                  ) : null}
+                  {purchaseMessage ? (
+                    <div className="vehicle-detail-inline-message" role="status">
+                      {purchaseMessage}
                     </div>
                   ) : null}
                 </div>

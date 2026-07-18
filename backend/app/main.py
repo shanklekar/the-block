@@ -268,6 +268,45 @@ def _build_is_watched_select(user_id: int | None) -> tuple[str, list[Any]]:
     )
 
 
+def _build_is_purchased_select() -> str:
+    return """
+        EXISTS (
+            SELECT 1
+            FROM purchased
+            WHERE purchased.vehicle_id = vehicles.id
+        ) AS is_purchased
+    """
+
+
+def _ensure_vehicle_is_watched(
+    connection: sqlite3.Connection,
+    *,
+    user_id: int,
+    vehicle_id: str,
+) -> None:
+    existing_watch = connection.execute(
+        """
+        SELECT 1
+        FROM watching
+        WHERE user_id = ?
+          AND vehicle_id = ?
+        LIMIT 1
+        """,
+        [user_id, vehicle_id],
+    ).fetchone()
+
+    if existing_watch is not None:
+        return
+
+    connection.execute(
+        """
+        INSERT INTO watching (user_id, vehicle_id)
+        VALUES (?, ?)
+        """,
+        [user_id, vehicle_id],
+    )
+
+
 def _build_vehicle_search_response(
     payload: VehicleSearchRequest,
     *,
@@ -289,8 +328,9 @@ def _build_vehicle_search_response(
         )
         order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
         watch_select, watch_parameters = _build_is_watched_select(payload.user_id)
+        purchase_select = _build_is_purchased_select()
         query = f"""
-            SELECT vehicles.*, {watch_select}
+            SELECT vehicles.*, {watch_select}, {purchase_select}
             FROM vehicles
             {where_clause}
             {order_clause}
@@ -312,6 +352,7 @@ def _build_vehicle_search_response(
     for row in rows:
         vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
         vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
+        vehicle_data["is_purchased"] = bool(vehicle_data.get("is_purchased"))
         vehicles.append(VehicleSearchResult(**vehicle_data))
 
     return VehicleSearchResponse(
@@ -617,6 +658,13 @@ def mutate_purchased(
                     detail="Vehicle has already been purchased by another user",
                 )
 
+            _ensure_vehicle_is_watched(
+                connection,
+                user_id=user_id,
+                vehicle_id=payload.vehicle_id,
+            )
+            connection.commit()
+
             return PurchaseMutationResponse(
                 user_id=existing_purchase["user_id"],
                 vehicle_id=existing_purchase["vehicle_id"],
@@ -626,6 +674,11 @@ def mutate_purchased(
             )
 
         try:
+            _ensure_vehicle_is_watched(
+                connection,
+                user_id=user_id,
+                vehicle_id=payload.vehicle_id,
+            )
             connection.execute(
                 """
                 INSERT INTO purchased (
@@ -657,6 +710,13 @@ def mutate_purchased(
                     detail="Vehicle has already been purchased by another user",
                 )
 
+            _ensure_vehicle_is_watched(
+                connection,
+                user_id=user_id,
+                vehicle_id=payload.vehicle_id,
+            )
+            connection.commit()
+
             return PurchaseMutationResponse(
                 user_id=existing_purchase["user_id"],
                 vehicle_id=existing_purchase["vehicle_id"],
@@ -679,18 +739,20 @@ def get_vehicle(
     vehicle_id: str,
     user_id: int | None = Query(default=None, ge=0),
 ) -> VehicleDetailResponse:
-    select_clause = "vehicles.*"
+    purchase_select = _build_is_purchased_select()
+    select_clause = f"vehicles.*, 0 AS is_watched, {purchase_select}"
     query_parameters: list[Any] = [vehicle_id]
 
     if user_id is not None:
-        select_clause = """
+        select_clause = f"""
             vehicles.*,
             EXISTS (
                 SELECT 1
                 FROM watching
                 WHERE watching.user_id = ?
                   AND watching.vehicle_id = vehicles.id
-            ) AS is_watched
+            ) AS is_watched,
+            {purchase_select}
         """
         query_parameters = [user_id, vehicle_id]
 
@@ -708,6 +770,7 @@ def get_vehicle(
 
     vehicle_data = serialize_vehicle(row, auction_start_offset=auction_start_offset)
     vehicle_data["is_watched"] = bool(vehicle_data.get("is_watched"))
+    vehicle_data["is_purchased"] = bool(vehicle_data.get("is_purchased"))
     return VehicleDetailResponse(**vehicle_data)
 
 

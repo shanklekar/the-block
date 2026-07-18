@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { formatCurrency } from "./inventoryConfig";
 import BuyNowConfirmationModal from "./components/BuyNowConfirmationModal";
 import InventorySection from "./components/InventorySection";
 import OpenlaneLogo from "./components/OpenlaneLogo";
@@ -8,6 +9,7 @@ import VehicleImageLightbox from "./components/VehicleImageLightbox";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 const CURRENT_USER_ID = 1;
+const PURCHASE_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/purchased`;
 const WATCH_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching`;
 
 export default function App() {
@@ -15,18 +17,38 @@ export default function App() {
   const [filterMetadata, setFilterMetadata] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapErrorMessage, setBootstrapErrorMessage] = useState("");
-  const [watchlistRefreshToken, setWatchlistRefreshToken] = useState(0);
+  const [inventoryRefreshToken, setInventoryRefreshToken] = useState(0);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [isVehicleDetailsLoading, setIsVehicleDetailsLoading] = useState(false);
   const [vehicleDetailsErrorMessage, setVehicleDetailsErrorMessage] = useState("");
   const [vehicleDetailsWatchErrorMessage, setVehicleDetailsWatchErrorMessage] = useState("");
+  const [vehicleDetailsPurchaseMessage, setVehicleDetailsPurchaseMessage] = useState("");
   const [isVehicleDetailsWatchPending, setIsVehicleDetailsWatchPending] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
   const [buyNowVehicle, setBuyNowVehicle] = useState(null);
+  const [isBuyNowPending, setIsBuyNowPending] = useState(false);
+  const [purchaseFeedbackMessage, setPurchaseFeedbackMessage] = useState("");
+  const [purchaseFeedbackTone, setPurchaseFeedbackTone] = useState("info");
   const [purchasedVehicleIds, setPurchasedVehicleIds] = useState({});
+  const [soldVehicleIds, setSoldVehicleIds] = useState({});
 
   const vehicleDetailsRequestRef = useRef(null);
+
+  async function fetchVehicleDetails(vehicleId, signal) {
+    const response = await fetch(
+      `${API_BASE_URL}/api/vehicles/${vehicleId}?user_id=${CURRENT_USER_ID}`,
+      {
+        signal,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Unable to load vehicle details.");
+    }
+
+    return response.json();
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,6 +102,7 @@ export default function App() {
       setIsVehicleDetailsLoading(false);
       setVehicleDetailsErrorMessage("");
       setVehicleDetailsWatchErrorMessage("");
+      setVehicleDetailsPurchaseMessage("");
       setIsVehicleDetailsWatchPending(false);
       vehicleDetailsRequestRef.current?.abort();
       return undefined;
@@ -94,20 +117,9 @@ export default function App() {
         setIsVehicleDetailsLoading(true);
         setVehicleDetailsErrorMessage("");
         setVehicleDetailsWatchErrorMessage("");
+        setVehicleDetailsPurchaseMessage("");
         setSelectedVehicle(null);
-
-        const response = await fetch(
-          `${API_BASE_URL}/api/vehicles/${selectedVehicleId}?user_id=${CURRENT_USER_ID}`,
-          {
-            signal: controller.signal,
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error("Unable to load vehicle details.");
-        }
-
-        const payload = await response.json();
+        const payload = await fetchVehicleDetails(selectedVehicleId, controller.signal);
         setSelectedVehicle(payload);
       } catch (error) {
         if (error.name !== "AbortError") {
@@ -174,6 +186,7 @@ export default function App() {
 
   function openVehicleDetails(vehicleId) {
     setSelectedImageUrl("");
+    setVehicleDetailsPurchaseMessage("");
     setSelectedVehicleId(vehicleId);
   }
 
@@ -185,27 +198,122 @@ export default function App() {
     setIsVehicleDetailsLoading(false);
     setVehicleDetailsErrorMessage("");
     setVehicleDetailsWatchErrorMessage("");
+    setVehicleDetailsPurchaseMessage("");
     setIsVehicleDetailsWatchPending(false);
   }
 
   function handleRequestBuyNow(vehicle) {
-    if (!vehicle || Number(vehicle.buy_now_price) <= 0 || purchasedVehicleIds[vehicle.id]) {
+    if (
+      !vehicle ||
+      Number(vehicle.buy_now_price) <= 0 ||
+      purchasedVehicleIds[vehicle.id] ||
+      soldVehicleIds[vehicle.id]
+    ) {
       return;
     }
 
+    setPurchaseFeedbackMessage("");
+    setVehicleDetailsPurchaseMessage("");
     setBuyNowVehicle(vehicle);
   }
 
-  function handleConfirmBuyNow() {
-    if (!buyNowVehicle) {
+  async function handleConfirmBuyNow() {
+    if (!buyNowVehicle || isBuyNowPending) {
       return;
     }
 
-    setPurchasedVehicleIds((currentIds) => ({
-      ...currentIds,
-      [buyNowVehicle.id]: true,
-    }));
-    setBuyNowVehicle(null);
+    const vehicleId = buyNowVehicle.id;
+    setIsBuyNowPending(true);
+    setPurchaseFeedbackMessage("");
+    setVehicleDetailsPurchaseMessage("");
+
+    try {
+      const response = await fetch(PURCHASE_MUTATION_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicle_id: vehicleId,
+          buy_now_price: buyNowVehicle.buy_now_price,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setPurchasedVehicleIds((currentIds) => ({
+          ...currentIds,
+          [vehicleId]: true,
+        }));
+        if (selectedVehicle?.id === vehicleId) {
+          setSelectedVehicle((currentVehicle) =>
+            currentVehicle
+              ? { ...currentVehicle, is_purchased: true, is_watched: true }
+              : currentVehicle,
+          );
+        }
+        setInventoryRefreshToken((currentValue) => currentValue + 1);
+        setBuyNowVehicle(null);
+        return;
+      }
+
+      if (response.status === 409 && payload.detail === "Buy now price does not match") {
+        let latestVehicle = null;
+
+        try {
+          latestVehicle = await fetchVehicleDetails(vehicleId);
+        } catch {
+          latestVehicle = null;
+        }
+
+        if (latestVehicle && selectedVehicle?.id === vehicleId) {
+          setSelectedVehicle(latestVehicle);
+        }
+
+        setInventoryRefreshToken((currentValue) => currentValue + 1);
+        setBuyNowVehicle(null);
+
+        const latestPriceMessage =
+          latestVehicle && Number(latestVehicle.buy_now_price) > 0
+            ? `The buy now price changed to ${formatCurrency(
+                latestVehicle.buy_now_price,
+              )}. You can try again.`
+            : "The buy now value changed and is no longer available for instant purchase.";
+
+        setPurchaseFeedbackTone("info");
+        setPurchaseFeedbackMessage(latestPriceMessage);
+        if (selectedVehicle?.id === vehicleId) {
+          setVehicleDetailsPurchaseMessage(latestPriceMessage);
+        }
+        return;
+      }
+
+      if (
+        response.status === 409 &&
+        payload.detail === "Vehicle has already been purchased by another user"
+      ) {
+        setSoldVehicleIds((currentIds) => ({
+          ...currentIds,
+          [vehicleId]: true,
+        }));
+        setInventoryRefreshToken((currentValue) => currentValue + 1);
+        setBuyNowVehicle(null);
+        if (selectedVehicle?.id === vehicleId) {
+          closeVehicleDetails();
+        }
+        setPurchaseFeedbackTone("error");
+        setPurchaseFeedbackMessage("Sorry, this vehicle has already been sold.");
+        return;
+      }
+
+      throw new Error(payload.detail ?? "Unable to complete purchase.");
+    } catch {
+      setPurchaseFeedbackTone("error");
+      setPurchaseFeedbackMessage("We couldn't complete that purchase right now.");
+    } finally {
+      setIsBuyNowPending(false);
+    }
   }
 
   function handleWatchStateChanged({ isWatched, vehicleId } = {}) {
@@ -216,7 +324,7 @@ export default function App() {
           : currentVehicle,
       );
     }
-    setWatchlistRefreshToken((currentValue) => currentValue + 1);
+    setInventoryRefreshToken((currentValue) => currentValue + 1);
   }
 
   async function handleVehicleDetailsWatchToggle() {
@@ -273,6 +381,19 @@ export default function App() {
       </section>
 
       <section className="inventory-layout inventory-section-stack">
+        {purchaseFeedbackMessage ? (
+          <div
+            className={
+              purchaseFeedbackTone === "error"
+                ? "inventory-feedback error"
+                : "inventory-inline-message"
+            }
+            role="status"
+          >
+            {purchaseFeedbackMessage}
+          </div>
+        ) : null}
+
         <InventorySection
           bootstrapErrorMessage={bootstrapErrorMessage}
           currentUserId={CURRENT_USER_ID}
@@ -283,13 +404,14 @@ export default function App() {
           filterSchema={filterSchema}
           filtersPanelLabel="Watchlist filters"
           filtersTitle="Refine watchlist"
+          hiddenVehicleIds={soldVehicleIds}
           isBootstrapping={isBootstrapping}
           onRequestBuyNow={handleRequestBuyNow}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Watchlist"
           purchasedVehicleIds={purchasedVehicleIds}
-          refreshToken={watchlistRefreshToken}
+          refreshToken={inventoryRefreshToken}
           searchEndpoint={`${API_BASE_URL}/api/users/1/watching/vehicles/search`}
           watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
           sectionTitle={(totalVehicles) =>
@@ -310,13 +432,14 @@ export default function App() {
           filterSchema={filterSchema}
           filtersPanelLabel="Search filters"
           filtersTitle="Refine inventory"
+          hiddenVehicleIds={soldVehicleIds}
           isBootstrapping={isBootstrapping}
           onRequestBuyNow={handleRequestBuyNow}
           onWatchStateChanged={handleWatchStateChanged}
           onSelectVehicle={openVehicleDetails}
           panelLabel="Live search results"
           purchasedVehicleIds={purchasedVehicleIds}
-          refreshToken={watchlistRefreshToken}
+          refreshToken={inventoryRefreshToken}
           searchEndpoint={`${API_BASE_URL}/api/vehicles/search`}
           watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
           sectionTitle={(totalVehicles) =>
@@ -331,8 +454,12 @@ export default function App() {
       {selectedVehicleId ? (
         <VehicleDetailsModal
           errorMessage={vehicleDetailsErrorMessage}
-          isPurchased={Boolean(selectedVehicle && purchasedVehicleIds[selectedVehicle.id])}
+          isPurchased={Boolean(
+            selectedVehicle &&
+              (selectedVehicle.is_purchased || purchasedVehicleIds[selectedVehicle.id]),
+          )}
           isLoading={isVehicleDetailsLoading}
+          purchaseMessage={vehicleDetailsPurchaseMessage}
           isWatchPending={isVehicleDetailsWatchPending}
           onBuyNow={handleRequestBuyNow}
           onClose={closeVehicleDetails}
@@ -345,6 +472,7 @@ export default function App() {
 
       {buyNowVehicle ? (
         <BuyNowConfirmationModal
+          isSubmitting={isBuyNowPending}
           onCancel={() => setBuyNowVehicle(null)}
           onConfirm={handleConfirmBuyNow}
           vehicle={buyNowVehicle}
