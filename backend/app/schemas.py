@@ -28,6 +28,19 @@ class FilterOperator(str, Enum):
     NOT_NULL = "not_null"
 
 
+class SortField(str, Enum):
+    AUCTION_START = "auction_start"
+    ODOMETER_KM = "odometer_km"
+    BUY_NOW_PRICE = "buy_now_price"
+    CONDITION_GRADE = "condition_grade"
+    CURRENT_PRICE = "current_price"
+
+
+class SortDirection(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+
+
 TEXT_FIELDS = {
     "id",
     "vin",
@@ -242,6 +255,8 @@ class VehicleSearchRequest(BaseModel):
     limit: int = Field(default=25, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
     criteria: FilterCriteria = Field(default_factory=FilterCriteria)
+    sort_by: SortField = SortField.AUCTION_START
+    sort_direction: SortDirection = SortDirection.ASC
 
 
 class VehicleResponse(BaseModel):

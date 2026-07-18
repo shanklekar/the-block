@@ -367,6 +367,36 @@ img {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.inventory-results-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 8px 12px;
+  border: 1px solid rgba(58, 99, 240, 0.14);
+  border-radius: 999px;
+  background: rgba(246, 248, 255, 0.96);
+}
+
+.inventory-results-sort-label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.inventory-results-sort-select {
+  min-width: 225px;
+  border: 0;
+  padding-right: 20px;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 .inventory-results-pill {
@@ -1038,6 +1068,16 @@ img {
 
   .inventory-results-meta {
     justify-content: flex-start;
+  }
+
+  .inventory-results-sort {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .inventory-results-sort-select {
+    min-width: 0;
+    width: 100%;
   }
 
   .vehicle-grid {

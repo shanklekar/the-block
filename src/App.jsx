@@ -5,9 +5,11 @@ import InventoryResults from "./components/InventoryResults";
 import VehicleDetailsModal from "./components/VehicleDetailsModal";
 import VehicleImageLightbox from "./components/VehicleImageLightbox";
 import {
+  DEFAULT_SORT_OPTION_ID,
   DEFAULT_FILTERS,
   FILTER_GROUPS,
   SEARCH_BATCH_SIZE,
+  SORT_OPTIONS,
   buildSearchCriteria,
 } from "./inventoryConfig";
 
@@ -46,6 +48,7 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [debouncedCriteriaKey, setDebouncedCriteriaKey] =
     useState(defaultCriteriaKey);
+  const [sortOptionId, setSortOptionId] = useState(DEFAULT_SORT_OPTION_ID);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [isVehicleDetailsLoading, setIsVehicleDetailsLoading] = useState(false);
@@ -55,12 +58,18 @@ export default function App() {
   const requestControllerRef = useRef(null);
   const vehicleDetailsRequestRef = useRef(null);
   const activeCriteriaKeyRef = useRef(defaultCriteriaKey);
+  const activeSortRef = useRef({
+    sortBy: SORT_OPTIONS[0].sortBy,
+    sortDirection: SORT_OPTIONS[0].sortDirection,
+  });
   const resultsSentinelRef = useRef(null);
   const isInitialLoadingRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
 
   const criteria = buildSearchCriteria(filters);
   const criteriaKey = JSON.stringify(criteria);
+  const selectedSortOption =
+    SORT_OPTIONS.find((option) => option.id === sortOptionId) ?? SORT_OPTIONS[0];
 
   useEffect(() => {
     const controller = new AbortController();
@@ -125,6 +134,10 @@ export default function App() {
 
     const parsedCriteria = JSON.parse(debouncedCriteriaKey);
     activeCriteriaKeyRef.current = debouncedCriteriaKey;
+    activeSortRef.current = {
+      sortBy: selectedSortOption.sortBy,
+      sortDirection: selectedSortOption.sortDirection,
+    };
     setHasMore(true);
     setVehicles([]);
     setTotalVehicles(0);
@@ -152,6 +165,8 @@ export default function App() {
             limit: SEARCH_BATCH_SIZE,
             offset: 0,
             criteria: parsedCriteria,
+            sort_by: selectedSortOption.sortBy,
+            sort_direction: selectedSortOption.sortDirection,
           }),
         });
 
@@ -186,7 +201,7 @@ export default function App() {
     return () => {
       controller.abort();
     };
-  }, [debouncedCriteriaKey, filterMetadata, filterSchema]);
+  }, [debouncedCriteriaKey, filterMetadata, filterSchema, selectedSortOption]);
 
   useEffect(() => {
     if (!selectedVehicleId) {
@@ -317,6 +332,7 @@ export default function App() {
     const nextOffset = vehicles.length;
     const currentCriteriaKey = activeCriteriaKeyRef.current;
     const currentCriteria = JSON.parse(currentCriteriaKey);
+    const currentSort = activeSortRef.current;
 
     requestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -337,6 +353,8 @@ export default function App() {
           limit: SEARCH_BATCH_SIZE,
           offset: nextOffset,
           criteria: currentCriteria,
+          sort_by: currentSort.sortBy,
+          sort_direction: currentSort.sortDirection,
         }),
       });
 
@@ -496,7 +514,9 @@ export default function App() {
           isInitialLoading={isInitialLoading}
           isLoadingMore={isLoadingMore}
           onSelectVehicle={openVehicleDetails}
+          onSortChange={setSortOptionId}
           resultsSentinelRef={resultsSentinelRef}
+          sortOptionId={sortOptionId}
           totalVehicles={totalVehicles}
           vehicles={vehicles}
         />

@@ -2,6 +2,71 @@ const KM_TO_MILES = 0.621371;
 
 export const SEARCH_BATCH_SIZE = 24;
 
+export const SORT_OPTIONS = [
+  {
+    id: "auction_start_asc",
+    label: "Auction start: Soonest first",
+    sortBy: "auction_start",
+    sortDirection: "asc",
+  },
+  {
+    id: "auction_start_desc",
+    label: "Auction start: Latest first",
+    sortBy: "auction_start",
+    sortDirection: "desc",
+  },
+  {
+    id: "odometer_km_asc",
+    label: "Miles: Low to high",
+    sortBy: "odometer_km",
+    sortDirection: "asc",
+  },
+  {
+    id: "odometer_km_desc",
+    label: "Miles: High to low",
+    sortBy: "odometer_km",
+    sortDirection: "desc",
+  },
+  {
+    id: "buy_now_price_asc",
+    label: "Buy now price: Low to high",
+    sortBy: "buy_now_price",
+    sortDirection: "asc",
+  },
+  {
+    id: "buy_now_price_desc",
+    label: "Buy now price: High to low",
+    sortBy: "buy_now_price",
+    sortDirection: "desc",
+  },
+  {
+    id: "condition_grade_asc",
+    label: "Grade: Low to high",
+    sortBy: "condition_grade",
+    sortDirection: "asc",
+  },
+  {
+    id: "condition_grade_desc",
+    label: "Grade: High to low",
+    sortBy: "condition_grade",
+    sortDirection: "desc",
+  },
+  {
+    id: "current_price_asc",
+    label: "Current price: Low to high",
+    sortBy: "current_price",
+    sortDirection: "asc",
+  },
+  {
+    id: "current_price_desc",
+    label: "Current price: High to low",
+    sortBy: "current_price",
+    sortDirection: "desc",
+  },
+];
+
+export const DEFAULT_SORT_OPTION_ID = SORT_OPTIONS[0].id;
+
 export const DEFAULT_FILTERS = {
   text: {
     vin: "",

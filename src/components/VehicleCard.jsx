@@ -9,7 +9,9 @@ export default function VehicleCard({ onSelect, vehicle }) {
   const primaryImage =
     vehicle.images[0] ??
     "https://placehold.co/800x600/1a1a2e/eaeaea?text=Vehicle+Image";
-  const vehicleTitle = `${vehicle.make} ${vehicle.year} ${vehicle.model}`;
+  const vehicleTitle = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+    .filter(Boolean)
+    .join(" ");
   const vehicleGrade = formatConditionGrade(vehicle.condition_grade);
 
   return (

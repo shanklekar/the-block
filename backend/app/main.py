@@ -26,6 +26,8 @@ from .schemas import (
     FilterRule,
     DatetimeMetadata,
     NumericMetadata,
+    SortDirection,
+    SortField,
     VehicleResponse,
     VehicleFilterMetadataResponse,
     VehicleSearchRequest,
@@ -86,6 +88,14 @@ OPERATOR_SQL = {
     FilterOperator.LTE: "<= ?",
     FilterOperator.GT: "> ?",
     FilterOperator.GTE: ">= ?",
+}
+
+SORT_SQL_FIELDS = {
+    SortField.AUCTION_START: "auction_start",
+    SortField.ODOMETER_KM: "odometer_km",
+    SortField.BUY_NOW_PRICE: "buy_now_price",
+    SortField.CONDITION_GRADE: "condition_grade",
+    SortField.CURRENT_PRICE: "COALESCE(current_bid, starting_bid)",
 }
 
 
@@ -173,6 +183,18 @@ def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
 
     joiner = " AND " if criteria.match.value == "and" else " OR "
     return f"WHERE {joiner.join(clauses)}", parameters
+
+
+def build_order_clause(sort_by: SortField, sort_direction: SortDirection) -> str:
+    sort_expression = SORT_SQL_FIELDS[sort_by]
+    direction = "ASC" if sort_direction == SortDirection.ASC else "DESC"
+
+    return (
+        "ORDER BY "
+        f"CASE WHEN {sort_expression} IS NULL THEN 1 ELSE 0 END ASC, "
+        f"{sort_expression} {direction}, "
+        "year DESC, make ASC, model ASC, id ASC"
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -345,11 +367,12 @@ def search_vehicles(payload: VehicleSearchRequest) -> VehicleSearchResponse:
             auction_start_offset,
         )
         where_clause, parameters = build_where_clause(translated_criteria)
+        order_clause = build_order_clause(payload.sort_by, payload.sort_direction)
         query = f"""
             SELECT *
             FROM vehicles
             {where_clause}
-            ORDER BY auction_start ASC, year DESC, make ASC, model ASC
+            {order_clause}
             LIMIT ?
             OFFSET ?
         """

@@ -1,3 +1,4 @@
+import { SORT_OPTIONS } from "../inventoryConfig";
 import VehicleCard from "./VehicleCard";
 
 function LoadingCards() {
@@ -25,7 +26,9 @@ export default function InventoryResults({
   isInitialLoading,
   isLoadingMore,
   onSelectVehicle,
+  onSortChange,
   resultsSentinelRef,
+  sortOptionId,
   totalVehicles,
   vehicles,
 }) {
@@ -44,6 +47,20 @@ export default function InventoryResults({
           </h2>
         </div>
         <div className="inventory-results-meta">
+          <label className="inventory-results-sort">
+            <span className="inventory-results-sort-label">Sort by</span>
+            <select
+              className="inventory-results-sort-select"
+              value={sortOptionId}
+              onChange={(event) => onSortChange(event.target.value)}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className="inventory-results-pill">
             Showing {vehicles.length.toLocaleString()}
           </span>
