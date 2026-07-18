@@ -45,6 +45,7 @@ export default function InventoryResults({
   resultsSentinelRef,
   sortLabel = "Sort by",
   sortOptionId,
+  showInlineBidding = false,
   title = "Inventory results",
   totalVehicles,
   vehicles,
@@ -119,6 +120,7 @@ export default function InventoryResults({
                 vehicle.is_purchased_by_user || purchasedVehicleIds[vehicle.id],
               )}
               key={vehicle.id}
+              showInlineBidding={showInlineBidding}
               onBidPlaced={onBidPlaced}
               onBuyNow={onRequestBuyNow}
               onSelect={onSelectVehicle}

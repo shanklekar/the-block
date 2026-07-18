@@ -441,6 +441,7 @@ export default function App() {
           purchasedVehicleIds={purchasedVehicleIds}
           refreshToken={inventoryRefreshToken}
           searchEndpoint={`${API_BASE_URL}/api/users/1/watching/vehicles/search`}
+          showInlineBidding
           watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
           sectionTitle={(totalVehicles) =>
             totalVehicles > 0

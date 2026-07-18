@@ -79,6 +79,7 @@ export function getLiveDisplayBid(vehicle, biddingState) {
 export function useVehicleLiveBidding({
   apiBaseUrl,
   enabled = true,
+  enableWebSocket = enabled,
   fetchInitialState = false,
   userId,
   vehicle,
@@ -156,7 +157,7 @@ export function useVehicleLiveBidding({
   }, [apiBaseUrl, enabled, fetchInitialState, userId, vehicle?.id]);
 
   useEffect(() => {
-    if (!enabled || !vehicle?.id || userId === null || userId === undefined) {
+    if (!enabled || !enableWebSocket || !vehicle?.id || userId === null || userId === undefined) {
       closeCurrentWebSocket();
       setStateErrorMessage("");
       return undefined;
@@ -253,6 +254,7 @@ export function useVehicleLiveBidding({
     biddingState?.auction_started,
     biddingState?.is_sold,
     enabled,
+    enableWebSocket,
     userId,
     vehicle?.id,
   ]);

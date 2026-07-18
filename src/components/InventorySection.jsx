@@ -100,6 +100,7 @@ export default function InventorySection({
   refreshToken = 0,
   searchEndpoint,
   sectionTitle,
+  showInlineBidding = false,
   sortLabel,
   emptyStateMessage,
   hiddenVehicleIds = {},
@@ -572,6 +573,7 @@ export default function InventorySection({
       resultsSentinelRef={resultsSentinelRef}
       sortLabel={sortLabel}
       sortOptionId={sortOptionId}
+      showInlineBidding={showInlineBidding}
       title={sectionTitle(totalVehicles)}
       totalVehicles={totalVehicles}
       vehicles={vehicles}

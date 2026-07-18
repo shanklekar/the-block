@@ -27,6 +27,7 @@ export default function VehicleCard({
   apiBaseUrl = "",
   currentUserId = null,
   isPurchased = false,
+  showInlineBidding = false,
   onBidPlaced,
   onBuyNow,
   onSelect,
@@ -39,8 +40,8 @@ export default function VehicleCard({
   const lastVehicleStateRef = useRef(null);
   const { biddingState, liveVehicle, stateErrorMessage } = useVehicleLiveBidding({
     apiBaseUrl,
-    enabled: Boolean(vehicle?.id),
-    fetchInitialState: true,
+    enabled: Boolean(vehicle?.id && showInlineBidding),
+    fetchInitialState: showInlineBidding,
     userId: currentUserId,
     vehicle,
   });
@@ -65,7 +66,12 @@ export default function VehicleCard({
   const vehicleIsSold = Boolean(displayVehicle.is_purchased);
   const showBuyNowButton =
     Number(displayVehicle.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
-  const showBidPanel = Boolean(biddingState?.auction_started);
+  const showBidPanel = Boolean(
+    showInlineBidding &&
+      biddingState?.auction_started &&
+      !vehicleIsSold &&
+      !vehicleIsPurchased,
+  );
   const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
 
   useEffect(() => {
@@ -160,42 +166,44 @@ export default function VehicleCard({
           </div>
         </dl>
 
-        {showBuyNowButton ? (
-          <div className="vehicle-card-actions">
+        {showBuyNowButton || showBidPanel ? (
+          <div className="vehicle-card-footer">
             {showBuyNowButton ? (
+              <div className="vehicle-card-actions">
+                <div
+                  className="vehicle-card-buy-now"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <BuyNowButton
+                    isPurchased={vehicleIsPurchased}
+                    price={displayVehicle.buy_now_price}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onBuyNow?.(displayVehicle);
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {showBidPanel ? (
               <div
-                className="vehicle-card-buy-now"
+                className="vehicle-card-bid-panel"
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
               >
-                <BuyNowButton
+                <VehicleBidPanel
+                  apiBaseUrl={apiBaseUrl}
+                  biddingState={biddingState}
+                  displayVehicle={displayVehicle}
                   isPurchased={vehicleIsPurchased}
-                  price={displayVehicle.buy_now_price}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onBuyNow?.(displayVehicle);
-                  }}
+                  onBidPlaced={onBidPlaced}
+                  stateErrorMessage={stateErrorMessage}
+                  userId={currentUserId}
                 />
               </div>
             ) : null}
-          </div>
-        ) : null}
-
-        {showBidPanel ? (
-          <div
-            className="vehicle-card-bid-panel"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <VehicleBidPanel
-              apiBaseUrl={apiBaseUrl}
-              biddingState={biddingState}
-              displayVehicle={displayVehicle}
-              isPurchased={vehicleIsPurchased}
-              onBidPlaced={onBidPlaced}
-              stateErrorMessage={stateErrorMessage}
-              userId={currentUserId}
-            />
           </div>
         ) : null}
       </div>

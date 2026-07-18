@@ -591,11 +591,16 @@ img {
   padding: 14px;
 }
 
-.vehicle-card-actions {
+.vehicle-card-footer {
   display: grid;
   gap: 14px;
   margin-top: auto;
   padding-top: 14px;
+}
+
+.vehicle-card-actions {
+  display: grid;
+  gap: 14px;
 }
 
 .vehicle-card-buy-now,
@@ -604,7 +609,7 @@ img {
 }
 
 .vehicle-card-bid-panel {
-  margin-top: 14px;
+  margin-top: 0;
 }
 
 .vehicle-card-heading {

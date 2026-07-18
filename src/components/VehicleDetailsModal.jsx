@@ -80,7 +80,9 @@ export default function VehicleDetailsModal({
   const vehicleIsSold = Boolean(displayVehicle?.is_purchased || biddingState?.is_sold);
   const showBuyNowButton =
     Number(displayVehicle?.buy_now_price) > 0 && (vehicleIsPurchased || !vehicleIsSold);
-  const showBidPanel = Boolean(biddingState?.auction_started);
+  const showBidPanel = Boolean(
+    biddingState?.auction_started && !vehicleIsSold && !vehicleIsPurchased,
+  );
   const titleStatusBadgeClassName = getTitleStatusBadgeClassName(
     displayVehicle?.title_status,
   );
