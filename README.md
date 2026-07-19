@@ -126,60 +126,59 @@ If I was forced to abide by the 3-4 hour time box and minimum requirements I wou
 What you intentionally included, skipped, or simplified?
 
 Included
-    - Everything described for the minimum bar
+- Everything described for the minimum bar
 
 Skipped
-    - I believe I covered everything that was listed as a minimum requirement
-    - I did not build a dedicated mobile app but the web app is responsive and should be usable on a phone.
-        - I chose this route because it covered all use cases, vs a dedicated mobile app would only cover mobile devices (if I went cross platform) or a single platform if I went native.
-        - I also do not have mobile development environment setup and that would take a while to setup and testing would take much longer
-    - Authentication - This was indicated as not being required so I started off not planning to implement it to save time and then forgot about it till the very end when I was wanting add multiple users for testing the bidding process.
+- I did not build a dedicated mobile app but the web app is responsive and should be usable on a phone.
+    - I chose this route because it covered all use cases, vs a dedicated mobile app would only cover mobile devices (if I went cross platform) or a single platform if I went native.
+    - I also do not have mobile development environment setup and that would take a while to setup and testing would take much longer
+- Authentication - This was indicated as not being required so I started off not planning to implement it to save time and then forgot about it till the very end when I was wanting add multiple users for testing the bidding process.
 
 Simplified
-    - User accounts are just a name and an ID to differentiate bidders for demo purposes
-    - Only built in the scope of individual users, nothing around dealerships with multiple users that you don't want to be able to bid against each other.
-    - There is no end to the auctions as there were no details provided as to whether they had set durations or if a live auctioneer would be dictating things like simulcast.  
-        - I thought about just saying that every auction would last x number of minutes, but I wanted to be able to demo several features that would have been hard to time around this. 
-            - Could have added config to manipulate time for the app but I had already spent enough time on it
+- User accounts are just a name and an ID to differentiate bidders for demo purposes
+- Only built in the scope of individual users, nothing around dealerships with multiple users that you don't want to be able to bid against each other.
+- There is no end to the auctions as there were no details provided as to whether they had set durations or if a live auctioneer would be dictating things like simulcast.  
+    - I thought about just saying that every auction would last x number of minutes, but I wanted to be able to demo several features that would have been hard to time around this. 
+        - Could have added config to manipulate time for the app but I had already spent enough time on it
 
 
 ## Stack
 
-- **Frontend:**
-    React + Vite
-        - Server side rendering would not allow for the desired experience
-        - I used react in the past so I had experience with it
-        - I knew it was more than capable of handling the requirements
-        - Lots of documentation out there for AI to be trained on
-        - Offers more flexibility than Angular (from my research many years ago)
-        - Used Vite because facebook and other sources recommended it and from quick research it sounded much better than create react app or building the stack myself
+### Frontend
+React + Vite
+- Server side rendering would not allow for the desired experience
+- I used react in the past so I had experience with it
+- I knew it was more than capable of handling the requirements
+- Lots of documentation out there for AI to be trained on
+- Offers more flexibility than Angular (from my research many years ago)
+- Used Vite because facebook and other sources recommended it and from quick research it sounded much better than create react app or building the stack myself
 
-- **Backend:**
-    Python Fast API
-        - Chose this for prototype/demo, would look at compiled languages for maximum speed for prd
-        - Scripted languages like python make development and testing much faster as there is no compile time
-        - I have greatest level of experience with python and its my most recent experience in data engineering
-        - Fast API is the fastest mainstream api framework for python and I find it the most straight forward to work with
-    Uvicorn
-        - The default webserver for fast api development
-        - Fast and easy to setup and use, perfect for prototyping/demo
+### Backend
+Python Fast API
+- Chose this for prototype/demo, would look at compiled languages for maximum speed for prd
+- Scripted languages like python make development and testing much faster as there is no compile time
+- I have greatest level of experience with python and its my most recent experience in data engineering
+- Fast API is the fastest mainstream api framework for python and I find it the most straight forward to work with
+Uvicorn
+- The default webserver for fast api development
+- Fast and easy to setup and use, perfect for prototyping/demo
 
-    For production, I would look at a .NET backend
-        - Compiled for speed
-        - Lots of local devs in corporate space have experience with it
-        - Lots of support and example code for AI to be trained on
-        - Its what we use internally
+For production, I would look at a .NET backend
+- Compiled for speed
+- Lots of local devs in corporate space have experience with it
+- Lots of support and example code for AI to be trained on
+- Its what we use internally
 
-- **Database:**
-    SQL Lite
-        - Chose for POC/demo because its by far the simplest to setup and use
-        - Met all the needs for the demo
-        - Requires no installation or setup for others to run on their machines
-    
-    For production, I would look at Postgres
-        - A lot better for handling locking and high volumes of records with low latency
-        - Lots of people with experience working with it and information for AI to be trained on
-        - Its what Openlane uses internally
+### Database
+SQL Lite
+- Chose for POC/demo because its by far the simplest to setup and use
+- Met all the needs for the demo
+- Requires no installation or setup for others to run on their machines
+
+For production, I would look at Postgres
+- A lot better for handling locking and high volumes of records with low latency
+- Lots of people with experience working with it and information for AI to be trained on
+- Its what Openlane uses internally
 
 ## What I Built
 
@@ -219,7 +218,7 @@ I described why I chose the stack above, and my UI decisions in the what I built
 
 What you tested and how?
 
-For UI work I like to see it, play with it, and iterate on it.  This means the code changes a lot in feature development.  I like to get everything working like I want, manually testing it, then build automated testing, then have AI review the code, then review it myself.
+For UI work I like to see it, play with it, and iterate on it.  This means the code changes a lot in feature development.  I like to get everything working like I want, manually testing it, then build automated testing, then have AI review the code, then review it myself.  I also keep the browser console open during testing to keep an eye out for errors there.
 
 For this build I did manual testing as I worked through it, then wrote some key unit tests after everything was working to try and catch any bugs introduced with future changes.  This included a live api testing script to test competitive bidding scenarios.  I focused on the unit testing and api testing on the bidding process as this is the real core of the app and the main component that bugs can't be tolerated with.
 
