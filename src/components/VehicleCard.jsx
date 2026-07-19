@@ -127,7 +127,7 @@ export default function VehicleCard({
   const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
   const hasVin = Boolean(displayVehicle.vin);
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
-  const isAuctionInProgress = Boolean(showInlineBidding && biddingState?.auction_started);
+  const isAuctionInProgress = Boolean(biddingState?.auction_started);
   const shouldShowAuctionStartRow =
     cardSurface === "live-search" || (cardSurface === "watchlist" && !isAuctionInProgress);
   const auctionCountdown = cardSurface === "live-search" && isAuctionInProgress
