@@ -5,6 +5,7 @@ const QUICK_BID_INCREMENTS = [100, 250, 500];
 const DEFAULT_BID_INCREMENT = 100;
 const LOW_BID_ERROR_MESSAGE = "Bid is too low";
 const LOW_BID_ERROR_TIMEOUT_MS = 2400;
+const SUCCESS_MESSAGE_TIMEOUT_MS = 2400;
 
 function parseBidAmount(value) {
   if (value === "") {
@@ -26,6 +27,7 @@ export default function VehicleBidPanel({
   variant = "card",
 }) {
   const lowBidErrorTimeoutRef = useRef(null);
+  const successMessageTimeoutRef = useRef(null);
   const [bidAmount, setBidAmount] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [hasBidInputError, setHasBidInputError] = useState(false);
@@ -87,8 +89,16 @@ export default function VehicleBidPanel({
     }
   }
 
+  function clearSuccessMessageTimeout() {
+    if (successMessageTimeoutRef.current) {
+      window.clearTimeout(successMessageTimeoutRef.current);
+      successMessageTimeoutRef.current = null;
+    }
+  }
+
   useEffect(() => {
     clearLowBidErrorTimeout();
+    clearSuccessMessageTimeout();
     setBidAmount(minimumNextBid ? String(Math.round(minimumNextBid)) : "");
     setErrorMessage("");
     setHasBidInputError(false);
@@ -134,8 +144,25 @@ export default function VehicleBidPanel({
   }, [errorMessage]);
 
   useEffect(() => {
+    if (!successMessage) {
+      return undefined;
+    }
+
+    clearSuccessMessageTimeout();
+    successMessageTimeoutRef.current = window.setTimeout(() => {
+      setSuccessMessage("");
+      successMessageTimeoutRef.current = null;
+    }, SUCCESS_MESSAGE_TIMEOUT_MS);
+
+    return () => {
+      clearSuccessMessageTimeout();
+    };
+  }, [successMessage]);
+
+  useEffect(() => {
     return () => {
       clearLowBidErrorTimeout();
+      clearSuccessMessageTimeout();
     };
   }, []);
 
@@ -203,14 +230,6 @@ export default function VehicleBidPanel({
     return null;
   }
 
-  let feedbackMessage = "";
-  let feedbackMessageClassName = "";
-
-  if (successMessage && variant !== "detail") {
-    feedbackMessage = successMessage;
-    feedbackMessageClassName = "inventory-inline-message";
-  }
-
   let submitButtonLabel = `Bid now ${formatCurrency(bidButtonAmount)}`;
   if (isSubmitting) {
     submitButtonLabel = "Submitting bid...";
@@ -262,16 +281,6 @@ export default function VehicleBidPanel({
         </div>
       </div>
 
-      {feedbackMessage ? (
-        <div
-          aria-live="polite"
-          className={feedbackMessageClassName}
-          role={feedbackMessageClassName === "inventory-inline-message" ? "status" : undefined}
-        >
-          {feedbackMessage}
-        </div>
-      ) : null}
-
       <form className="vehicle-bid-panel-form" noValidate onSubmit={handleSubmit}>
         <div className="vehicle-bid-panel-shortcuts">
           {QUICK_BID_INCREMENTS.map((increment) => (
@@ -317,6 +326,12 @@ export default function VehicleBidPanel({
         {errorMessage ? (
           <div className="vehicle-bid-panel-inline-message error" role="status">
             {errorMessage}
+          </div>
+        ) : null}
+
+        {!errorMessage && successMessage ? (
+          <div aria-live="polite" className="vehicle-bid-panel-inline-message" role="status">
+            {successMessage}
           </div>
         ) : null}
 

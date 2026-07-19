@@ -162,9 +162,10 @@ img {
 }
 
 .inventory-hero-copy {
-  flex: 0 1 320px;
-  max-width: 42ch;
   margin: 0;
+  max-width: 42ch;
+  min-width: 0;
+  flex: 0 1 auto;
   color: var(--text-muted);
   font-size: clamp(1.2rem, 2vw, 1.9rem);
   line-height: 0.98;
@@ -174,8 +175,94 @@ img {
   white-space: nowrap;
 }
 
+.inventory-hero-copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.inventory-hero-copy-row .user-profile-button {
+  flex-shrink: 0;
+}
+
+.inventory-hero-copy {
+  margin: 0;
+}
+
 .inventory-hero-copy strong {
   font-weight: 800;
+}
+
+.user-profile-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 108px;
+  min-height: 96px;
+  border: 1px solid rgba(58, 99, 240, 0.16);
+  border-radius: 24px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text-primary);
+  box-shadow: 0 18px 40px rgba(17, 42, 120, 0.08);
+  backdrop-filter: blur(18px);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.user-profile-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(58, 99, 240, 0.28);
+  box-shadow: 0 20px 44px rgba(17, 42, 120, 0.12);
+}
+
+.user-profile-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px rgba(165, 194, 255, 0.34),
+    0 20px 44px rgba(17, 42, 120, 0.12);
+}
+
+.user-profile-button[aria-expanded="true"] {
+  border-color: rgba(58, 99, 240, 0.32);
+  background: rgba(241, 246, 255, 0.98);
+}
+
+.user-profile-button-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #274fe2 0%, #3f67f2 100%);
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(39, 79, 226, 0.24);
+}
+
+.user-profile-button-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.user-profile-button-label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventory-layout {
@@ -1621,6 +1708,177 @@ img {
   padding: 22px;
 }
 
+.user-modal-shell {
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.user-modal {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(58, 99, 240, 0.16), transparent 34%),
+    rgba(255, 255, 255, 0.98);
+  box-shadow: 0 32px 90px rgba(8, 20, 44, 0.24);
+}
+
+.user-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid rgba(17, 42, 120, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.user-modal-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  letter-spacing: -0.03em;
+}
+
+.user-modal-copy {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.user-modal-content {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
+.user-modal-section {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(58, 99, 240, 0.1);
+  border-radius: 22px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 255, 0.94));
+}
+
+.user-modal-section h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.user-modal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.user-modal-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  border: 1px solid rgba(58, 99, 240, 0.14);
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text-primary);
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.user-modal-user:hover {
+  transform: translateY(-1px);
+  border-color: rgba(58, 99, 240, 0.26);
+  box-shadow: 0 16px 30px rgba(17, 42, 120, 0.08);
+}
+
+.user-modal-user:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px rgba(165, 194, 255, 0.34),
+    0 16px 30px rgba(17, 42, 120, 0.08);
+}
+
+.user-modal-user.is-active {
+  border-color: rgba(58, 99, 240, 0.34);
+  background: rgba(241, 246, 255, 0.96);
+}
+
+.user-modal-user-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #274fe2 0%, #3f67f2 100%);
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(39, 79, 226, 0.2);
+}
+
+.user-modal-user-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.user-modal-user-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.user-modal-user-copy strong,
+.user-modal-user-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-modal-user-copy strong {
+  font-size: 1rem;
+}
+
+.user-modal-user-copy span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.user-modal-form {
+  display: grid;
+  gap: 14px;
+}
+
+.user-modal-field {
+  display: grid;
+  gap: 8px;
+}
+
+.user-modal-field-label {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.user-modal-create-button {
+  width: fit-content;
+}
+
 .vehicle-detail-top {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2293,6 +2551,12 @@ img {
     flex: initial;
   }
 
+  .inventory-hero-copy-row {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
   .inventory-hero-copy {
     text-align: left;
   }
@@ -2306,17 +2570,25 @@ img {
   }
 
   .vehicle-detail-shell,
-  .vehicle-lightbox-shell {
+  .vehicle-lightbox-shell,
+  .user-modal-shell {
     padding: 14px;
   }
 
-  .vehicle-detail-modal {
+  .vehicle-detail-modal,
+  .user-modal {
     max-height: calc(100vh - 28px);
   }
 
   .vehicle-detail-header,
   .vehicle-detail-content,
-  .vehicle-detail-gallery {
+  .vehicle-detail-gallery,
+  .user-modal-content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .user-modal-header {
     padding-left: 16px;
     padding-right: 16px;
   }
@@ -2329,7 +2601,8 @@ img {
 @media (max-width: 720px) {
   .inventory-filter-actions,
   .inventory-results-header,
-  .purchased-vehicles-header {
+  .purchased-vehicles-header,
+  .user-modal-header {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -2347,6 +2620,10 @@ img {
   .inventory-results-sort,
   .inventory-section-toggle {
     width: 100%;
+  }
+
+  .user-profile-button {
+    min-height: 88px;
   }
 
   .purchased-vehicles-search {
@@ -2421,6 +2698,20 @@ img {
     align-items: flex-start;
   }
 
+  .vehicle-detail-header-actions,
+  .user-modal-header {
+    width: 100%;
+  }
+
+  .inventory-hero-copy-row {
+    align-items: stretch;
+  }
+
+  .inventory-hero-copy-row .inventory-hero-copy,
+  .inventory-hero-copy-row .user-profile-button {
+    width: 100%;
+  }
+
   .vehicle-detail-header-actions {
     width: 100%;
     justify-content: space-between;
@@ -2450,6 +2741,11 @@ img {
   .vehicle-detail-meta-card,
   .vehicle-detail-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .user-modal-create-button,
+  .user-modal-user {
+    width: 100%;
   }
 
   .vehicle-detail-meta-card {

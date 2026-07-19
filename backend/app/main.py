@@ -46,6 +46,8 @@ from .schemas import (
     VehicleSearchResult,
     VehicleSearchRequest,
     VehicleSearchResponse,
+    UserCreateRequest,
+    UserSummary,
     WatchingMutationRequest,
     WatchingMutationResponse,
 )
@@ -71,6 +73,7 @@ if not logging.getLogger().handlers:
 logger = logging.getLogger("the_block.api")
 
 BID_INCREMENT = 100.0
+HIDDEN_USER_ID = 0
 
 
 class VehicleBiddingConnectionManager:
@@ -507,6 +510,31 @@ def _user_exists(connection: sqlite3.Connection, user_id: int) -> bool:
     return row is not None
 
 
+def _serialize_user_row(row: sqlite3.Row) -> UserSummary:
+    return UserSummary(
+        user_id=row["user_id"],
+        user_name=row["user_name"],
+    )
+
+
+def _build_user_name_lookup_value(user_name: str) -> str:
+    return user_name.strip().lower()
+
+
+def _visible_user_exists(connection: sqlite3.Connection, user_id: int) -> bool:
+    row = connection.execute(
+        """
+        SELECT 1
+        FROM users
+        WHERE user_id = ?
+          AND user_id != ?
+        LIMIT 1
+        """,
+        [user_id, HIDDEN_USER_ID],
+    ).fetchone()
+    return row is not None
+
+
 def _vehicle_exists(connection: sqlite3.Connection, vehicle_id: str) -> bool:
     row = connection.execute(
         "SELECT 1 FROM vehicles WHERE id = ? LIMIT 1",
@@ -934,6 +962,70 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 @app.get("/health")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/users", response_model=list[UserSummary])
+def list_users() -> list[UserSummary]:
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT user_id, user_name
+            FROM users
+            WHERE user_id != ?
+            ORDER BY LOWER(TRIM(user_name)) ASC, user_id ASC
+            """,
+            [HIDDEN_USER_ID],
+        ).fetchall()
+
+    return [_serialize_user_row(row) for row in rows]
+
+
+@app.post("/api/users", response_model=UserSummary, status_code=status.HTTP_201_CREATED)
+def create_user(payload: UserCreateRequest) -> UserSummary:
+    normalized_user_name = _build_user_name_lookup_value(payload.user_name)
+
+    with get_connection() as connection:
+        duplicate_user = connection.execute(
+            """
+            SELECT user_id
+            FROM users
+            WHERE user_id != ?
+              AND LOWER(TRIM(user_name)) = ?
+            LIMIT 1
+            """,
+            [HIDDEN_USER_ID, normalized_user_name],
+        ).fetchone()
+
+        if duplicate_user is not None:
+            raise HTTPException(status_code=409, detail="User name already exists")
+
+        cursor = connection.execute(
+            """
+            INSERT INTO users (user_name)
+            VALUES (?)
+            """,
+            [payload.user_name],
+        )
+        connection.commit()
+        created_user_id = cursor.lastrowid
+
+        if created_user_id is None or not _visible_user_exists(connection, created_user_id):
+            raise HTTPException(status_code=500, detail="Unable to create user")
+
+        row = connection.execute(
+            """
+            SELECT user_id, user_name
+            FROM users
+            WHERE user_id = ?
+            LIMIT 1
+            """,
+            [created_user_id],
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=500, detail="Unable to create user")
+
+    return _serialize_user_row(row)
 
 
 @app.get("/api/vehicles/filters/schema")

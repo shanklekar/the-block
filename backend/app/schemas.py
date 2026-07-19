@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LogicOperator(str, Enum):
@@ -478,3 +478,29 @@ class VehicleFilterOptionsResponse(BaseModel):
 
     field: str
     options: list[FilterOption]
+
+
+class UserSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    user_name: str
+
+
+class UserCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_name: str
+
+    @field_validator("user_name")
+    @classmethod
+    def validate_user_name(cls, value: str) -> str:
+        normalized_value = value.strip()
+
+        if not normalized_value:
+            raise ValueError("User name cannot be empty")
+
+        if len(normalized_value) > 100:
+            raise ValueError("User name must be 100 characters or fewer")
+
+        return normalized_value

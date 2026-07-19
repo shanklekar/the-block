@@ -4,20 +4,21 @@ import BuyNowConfirmationModal from "./components/BuyNowConfirmationModal";
 import InventorySection from "./components/InventorySection";
 import OpenlaneLogo from "./components/OpenlaneLogo";
 import PurchasedVehiclesSection from "./components/PurchasedVehiclesSection";
+import UserModal from "./components/UserModal";
+import UserProfileButton from "./components/UserProfileButton";
 import VehicleDetailsModal from "./components/VehicleDetailsModal";
 import VehicleImageLightbox from "./components/VehicleImageLightbox";
 import { buildVehicleHistoryPath, readSharedVehicleId } from "./vehicleShare";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
-const CURRENT_USER_ID = 1;
-const PURCHASE_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/purchased`;
-const WATCH_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching`;
 const SEARCH_VIEW = "search";
 const PURCHASED_VIEW = "purchased";
 const PURCHASED_VEHICLES_SEGMENT = "purchased_vehicles";
 const APP_BASE_PATH = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+const DEFAULT_USER_ID = 1;
 const WATCHLIST_COLLAPSED_STORAGE_KEY = "block.watchlist.collapsed";
+const ACTIVE_USER_STORAGE_KEY = "block.active-user-id";
 
 function normalizePathname(pathname = "/") {
   if (!pathname) {
@@ -46,6 +47,67 @@ function readActiveViewFromUrl(location = window.location) {
   return SEARCH_VIEW;
 }
 
+function readStoredUserId() {
+  try {
+    const storedValue = window.localStorage.getItem(ACTIVE_USER_STORAGE_KEY);
+    if (!storedValue) {
+      return null;
+    }
+
+    const parsedValue = Number.parseInt(storedValue, 10);
+    return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
+  } catch {
+    return null;
+  }
+}
+
+function sortUsers(users = []) {
+  return [...users].sort(
+    (leftUser, rightUser) =>
+      leftUser.user_name.localeCompare(rightUser.user_name, undefined, {
+        sensitivity: "base",
+      }) || leftUser.user_id - rightUser.user_id,
+  );
+}
+
+function resolveInitialUserId(users = []) {
+  if (!users.length) {
+    return null;
+  }
+
+  const availableUserIds = new Set(users.map((user) => user.user_id));
+  const storedUserId = readStoredUserId();
+
+  if (storedUserId !== null && availableUserIds.has(storedUserId)) {
+    return storedUserId;
+  }
+
+  if (availableUserIds.has(DEFAULT_USER_ID)) {
+    return DEFAULT_USER_ID;
+  }
+
+  return users[0]?.user_id ?? null;
+}
+
+function buildUserScopedEndpoint(userId, suffix) {
+  return `${API_BASE_URL}/api/users/${userId}${suffix}`;
+}
+
+function formatApiErrorMessage(detail, fallbackMessage) {
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const [firstError] = detail;
+    if (typeof firstError?.msg === "string" && firstError.msg.trim()) {
+      return firstError.msg;
+    }
+  }
+
+  return fallbackMessage;
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState(() => readActiveViewFromUrl());
   const [isWatchlistCollapsed, setIsWatchlistCollapsed] = useState(() => {
@@ -55,6 +117,11 @@ export default function App() {
       return false;
     }
   });
+  const [users, setUsers] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [isCreateUserPending, setIsCreateUserPending] = useState(false);
+  const [createUserErrorMessage, setCreateUserErrorMessage] = useState("");
   const [filterSchema, setFilterSchema] = useState(null);
   const [filterMetadata, setFilterMetadata] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -76,6 +143,22 @@ export default function App() {
   const [soldVehicleIds, setSoldVehicleIds] = useState({});
 
   const vehicleDetailsRequestRef = useRef(null);
+  const lastResolvedUserIdRef = useRef(null);
+
+  const currentUser = users.find((user) => user.user_id === currentUserId) ?? null;
+  const currentUserName = currentUser?.user_name ?? "User";
+  const purchaseMutationEndpoint =
+    currentUserId === null ? "" : buildUserScopedEndpoint(currentUserId, "/purchased");
+  const watchMutationEndpoint =
+    currentUserId === null ? "" : buildUserScopedEndpoint(currentUserId, "/watching");
+  const watchedFilterOptionsEndpoint =
+    currentUserId === null
+      ? ""
+      : buildUserScopedEndpoint(currentUserId, "/watching/vehicles/filters/options");
+  const watchedSearchEndpoint =
+    currentUserId === null
+      ? ""
+      : buildUserScopedEndpoint(currentUserId, "/watching/vehicles/search");
 
   function syncViewUrl(view, { replace = false } = {}) {
     const url = new URL(window.location.href);
@@ -138,8 +221,12 @@ export default function App() {
   }
 
   async function fetchVehicleDetails(vehicleId, signal) {
+    if (currentUserId === null) {
+      throw new Error("Unable to load vehicle details.");
+    }
+
     const response = await fetch(
-      `${API_BASE_URL}/api/vehicles/${vehicleId}?user_id=${CURRENT_USER_ID}`,
+      `${API_BASE_URL}/api/vehicles/${vehicleId}?user_id=${currentUserId}`,
       {
         signal,
       },
@@ -160,29 +247,42 @@ export default function App() {
         setIsBootstrapping(true);
         setBootstrapErrorMessage("");
 
-        const [schemaResponse, metadataResponse] = await Promise.all([
+        const [schemaResponse, metadataResponse, usersResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/api/vehicles/filters/schema`, {
             signal: controller.signal,
           }),
           fetch(`${API_BASE_URL}/api/vehicles/filters/metadata`, {
             signal: controller.signal,
           }),
+          fetch(`${API_BASE_URL}/api/users`, {
+            signal: controller.signal,
+          }),
         ]);
 
-        if (!schemaResponse.ok || !metadataResponse.ok) {
-          throw new Error("Unable to load inventory filters.");
+        if (!schemaResponse.ok || !metadataResponse.ok || !usersResponse.ok) {
+          throw new Error("Unable to load app data.");
         }
 
-        const [schemaPayload, metadataPayload] = await Promise.all([
+        const [schemaPayload, metadataPayload, usersPayload] = await Promise.all([
           schemaResponse.json(),
           metadataResponse.json(),
+          usersResponse.json(),
         ]);
+        const sortedUsers = sortUsers(usersPayload);
+        const initialUserId = resolveInitialUserId(sortedUsers);
 
+        if (initialUserId === null) {
+          throw new Error("No users available.");
+        }
+
+        setUsers(sortedUsers);
+        setCurrentUserId(initialUserId);
+        lastResolvedUserIdRef.current = initialUserId;
         setFilterSchema(schemaPayload);
         setFilterMetadata(metadataPayload);
       } catch (error) {
         if (error.name !== "AbortError") {
-          setBootstrapErrorMessage("We couldn't load inventory right now.");
+          setBootstrapErrorMessage("We couldn't load the app right now.");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -227,7 +327,47 @@ export default function App() {
   }, [isWatchlistCollapsed]);
 
   useEffect(() => {
-    if (!selectedVehicleId) {
+    if (currentUserId === null) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(ACTIVE_USER_STORAGE_KEY, String(currentUserId));
+    } catch {
+      // Ignore storage failures and keep the in-memory preference.
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (currentUserId === null) {
+      return;
+    }
+
+    if (lastResolvedUserIdRef.current === null) {
+      lastResolvedUserIdRef.current = currentUserId;
+      return;
+    }
+
+    if (lastResolvedUserIdRef.current === currentUserId) {
+      return;
+    }
+
+    lastResolvedUserIdRef.current = currentUserId;
+    setPurchaseFeedbackMessage("");
+    setPurchaseFeedbackTone("info");
+    setVehicleDetailsErrorMessage("");
+    setVehicleDetailsWatchErrorMessage("");
+    setVehicleDetailsPurchaseMessage("");
+    setIsVehicleDetailsWatchPending(false);
+    setLightboxState(null);
+    setBuyNowVehicle(null);
+    setPurchasedVehicleIds({});
+    setSoldVehicleIds({});
+    setInventoryRefreshToken((currentValue) => currentValue + 1);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!selectedVehicleId || currentUserId === null) {
       setSelectedVehicle(null);
       setIsVehicleDetailsLoading(false);
       setVehicleDetailsErrorMessage("");
@@ -267,7 +407,7 @@ export default function App() {
     return () => {
       controller.abort();
     };
-  }, [selectedVehicleId]);
+  }, [currentUserId, selectedVehicleId]);
 
   useEffect(() => {
     if (!selectedVehicleId && !lightboxState && !buyNowVehicle) {
@@ -337,7 +477,7 @@ export default function App() {
   }, [buyNowVehicle, lightboxState, selectedVehicleId]);
 
   useEffect(() => {
-    if (!selectedVehicleId && !lightboxState && !buyNowVehicle) {
+    if (!selectedVehicleId && !lightboxState && !buyNowVehicle && !isUserModalOpen) {
       return undefined;
     }
 
@@ -347,7 +487,7 @@ export default function App() {
     return () => {
       document.body.style.overflow = overflow;
     };
-  }, [buyNowVehicle, lightboxState, selectedVehicleId]);
+  }, [buyNowVehicle, isUserModalOpen, lightboxState, selectedVehicleId]);
 
   function openImageLightbox(images, activeIndex, vehicleTitle) {
     if (!Array.isArray(images) || !images.length) {
@@ -421,6 +561,55 @@ export default function App() {
     syncVehicleUrl("", { replace: true });
   }
 
+  function handleSelectUser(nextUserId) {
+    setCreateUserErrorMessage("");
+    setIsUserModalOpen(false);
+
+    if (nextUserId === currentUserId) {
+      return;
+    }
+
+    setCurrentUserId(nextUserId);
+  }
+
+  async function handleCreateUser(userName) {
+    setIsCreateUserPending(true);
+    setCreateUserErrorMessage("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_name: userName,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setCreateUserErrorMessage(
+          formatApiErrorMessage(payload.detail, "We couldn't create that user right now."),
+        );
+        return null;
+      }
+
+      setUsers((currentUsers) => sortUsers([...currentUsers, payload]));
+
+      if (currentUserId === null) {
+        setCurrentUserId(payload.user_id);
+      }
+
+      return payload;
+    } catch {
+      setCreateUserErrorMessage("We couldn't create that user right now.");
+      return null;
+    } finally {
+      setIsCreateUserPending(false);
+    }
+  }
+
   function handleRequestBuyNow(vehicle) {
     if (
       !vehicle ||
@@ -438,7 +627,7 @@ export default function App() {
   }
 
   async function handleConfirmBuyNow() {
-    if (!buyNowVehicle || isBuyNowPending) {
+    if (!buyNowVehicle || isBuyNowPending || !purchaseMutationEndpoint) {
       return;
     }
 
@@ -448,7 +637,7 @@ export default function App() {
     setVehicleDetailsPurchaseMessage("");
 
     try {
-      const response = await fetch(PURCHASE_MUTATION_ENDPOINT, {
+      const response = await fetch(purchaseMutationEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -553,7 +742,7 @@ export default function App() {
   }
 
   async function handleVehicleDetailsWatchToggle() {
-    if (!selectedVehicle) {
+    if (!selectedVehicle || !watchMutationEndpoint) {
       return;
     }
 
@@ -561,7 +750,7 @@ export default function App() {
     setIsVehicleDetailsWatchPending(true);
 
     try {
-      const response = await fetch(WATCH_MUTATION_ENDPOINT, {
+      const response = await fetch(watchMutationEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -595,10 +784,6 @@ export default function App() {
   }
 
   function handleBidPlaced(payload) {
-    const successMessage = `Bid placed at ${formatCurrency(payload.current_bid)}.`;
-    setPurchaseFeedbackTone("info");
-    setPurchaseFeedbackMessage(successMessage);
-
     handleWatchStateChanged({
       isWatched: true,
       vehicleId: payload.vehicle_id,
@@ -643,9 +828,19 @@ export default function App() {
             Purchased Vehicles
           </button>
         </nav>
-        <p className="inventory-hero-copy">
-          <strong>Wholesale made easy</strong>
-        </p>
+        <div className="inventory-hero-copy-row">
+          <p className="inventory-hero-copy">
+            <strong>Wholesale made easy</strong>
+          </p>
+          <UserProfileButton
+            currentUserName={currentUserName}
+            isOpen={isUserModalOpen}
+            onClick={() => {
+              setCreateUserErrorMessage("");
+              setIsUserModalOpen(true);
+            }}
+          />
+        </div>
       </section>
 
       <section className="inventory-layout inventory-section-stack">
@@ -662,17 +857,21 @@ export default function App() {
           </div>
         ) : null}
 
-        {activeView === SEARCH_VIEW ? (
+        {currentUserId === null ? (
+          <div className={bootstrapErrorMessage ? "inventory-feedback error" : "inventory-feedback"}>
+            {bootstrapErrorMessage || "Loading user profile..."}
+          </div>
+        ) : activeView === SEARCH_VIEW ? (
           <>
             <InventorySection
               apiBaseUrl={API_BASE_URL}
               bootstrapErrorMessage={bootstrapErrorMessage}
               collapseLabel="Watchlist"
-              currentUserId={CURRENT_USER_ID}
+              currentUserId={currentUserId}
               emptyStateMessage="No watched vehicles match your criteria."
               enableWatchToggle
               filterMetadata={filterMetadata}
-              filterOptionsEndpoint={`${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching/vehicles/filters/options`}
+              filterOptionsEndpoint={watchedFilterOptionsEndpoint}
               filterPanelId="watchlist-filters-panel"
               filterSchema={filterSchema}
               filtersPanelLabel="Watchlist filters"
@@ -691,22 +890,22 @@ export default function App() {
               panelLabel="Watchlist"
               purchasedVehicleIds={purchasedVehicleIds}
               refreshToken={inventoryRefreshToken}
-              searchEndpoint={`${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching/vehicles/search`}
+              searchEndpoint={watchedSearchEndpoint}
               sectionCollapseEnabled
-              showInlineBidding
-              watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
               sectionTitle={(totalVehicles) =>
                 totalVehicles > 0
                   ? `${totalVehicles.toLocaleString()} watched vehicles ready to review`
                   : "Your watchlist"
               }
+              showInlineBidding
               sortLabel="Sort by"
+              watchMutationEndpoint={watchMutationEndpoint}
             />
 
             <InventorySection
               apiBaseUrl={API_BASE_URL}
               bootstrapErrorMessage={bootstrapErrorMessage}
-              currentUserId={CURRENT_USER_ID}
+              currentUserId={currentUserId}
               emptyStateMessage="No vehicles match your criteria."
               enableWatchToggle
               filterMetadata={filterMetadata}
@@ -726,37 +925,50 @@ export default function App() {
               purchasedVehicleIds={purchasedVehicleIds}
               refreshToken={inventoryRefreshToken}
               searchEndpoint={`${API_BASE_URL}/api/vehicles/search`}
-              watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
               sectionTitle={(totalVehicles) =>
                 totalVehicles > 0
                   ? `${totalVehicles.toLocaleString()} vehicles ready to review`
                   : "Inventory results"
               }
               sortLabel="Sort by"
+              watchMutationEndpoint={watchMutationEndpoint}
             />
           </>
         ) : (
           <PurchasedVehiclesSection
             apiBaseUrl={API_BASE_URL}
-            currentUserId={CURRENT_USER_ID}
+            currentUserId={currentUserId}
             refreshToken={inventoryRefreshToken}
             onSelectVehicle={openVehicleDetails}
           />
         )}
       </section>
 
+      <UserModal
+        createErrorMessage={createUserErrorMessage}
+        currentUserId={currentUserId}
+        isCreatePending={isCreateUserPending}
+        isOpen={isUserModalOpen}
+        users={users}
+        onClose={() => {
+          setCreateUserErrorMessage("");
+          setIsUserModalOpen(false);
+        }}
+        onCreateUser={handleCreateUser}
+        onSelectUser={handleSelectUser}
+      />
+
       {selectedVehicleId ? (
         <VehicleDetailsModal
           apiBaseUrl={API_BASE_URL}
-          currentUserId={CURRENT_USER_ID}
+          currentUserId={currentUserId}
           errorMessage={vehicleDetailsErrorMessage}
+          isLoading={isVehicleDetailsLoading}
           isPurchased={Boolean(
             selectedVehicle &&
               (selectedVehicle.is_purchased_by_user ||
                 purchasedVehicleIds[selectedVehicle.id]),
           )}
-          isLoading={isVehicleDetailsLoading}
-          purchaseMessage={vehicleDetailsPurchaseMessage}
           isWatchPending={isVehicleDetailsWatchPending}
           onBidPlaced={handleBidPlaced}
           onBuyNow={handleRequestBuyNow}
@@ -771,6 +983,7 @@ export default function App() {
             )
           }
           onToggleWatch={handleVehicleDetailsWatchToggle}
+          purchaseMessage={vehicleDetailsPurchaseMessage}
           vehicle={selectedVehicle}
           watchErrorMessage={vehicleDetailsWatchErrorMessage}
         />
@@ -779,9 +992,9 @@ export default function App() {
       {buyNowVehicle ? (
         <BuyNowConfirmationModal
           isSubmitting={isBuyNowPending}
+          vehicle={buyNowVehicle}
           onCancel={() => setBuyNowVehicle(null)}
           onConfirm={handleConfirmBuyNow}
-          vehicle={buyNowVehicle}
         />
       ) : null}
 
