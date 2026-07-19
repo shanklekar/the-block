@@ -69,9 +69,11 @@ function CopiedIcon() {
 export default function VehicleCard({
   apiBaseUrl = "",
   currentUserId = null,
+  isBiddingEnabled = false,
   isPurchased = false,
   showInlineBidding = false,
   onBidPlaced,
+  onBiddingToggleChange,
   onBuyNow,
   onSelect,
   onToggleWatch,
@@ -307,8 +309,10 @@ export default function VehicleCard({
                   apiBaseUrl={apiBaseUrl}
                   biddingState={biddingState}
                   displayVehicle={displayVehicle}
+                  isBiddingEnabled={isBiddingEnabled}
                   isPurchased={vehicleIsPurchased}
                   onBidPlaced={onBidPlaced}
+                  onBiddingToggleChange={onBiddingToggleChange}
                   stateErrorMessage={stateErrorMessage}
                   userId={currentUserId}
                 />

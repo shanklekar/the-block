@@ -141,6 +141,7 @@ export default function App() {
   const [purchaseFeedbackTone, setPurchaseFeedbackTone] = useState("info");
   const [purchasedVehicleIds, setPurchasedVehicleIds] = useState({});
   const [soldVehicleIds, setSoldVehicleIds] = useState({});
+  const [biddingEnabledVehicleIds, setBiddingEnabledVehicleIds] = useState({});
 
   const vehicleDetailsRequestRef = useRef(null);
   const lastResolvedUserIdRef = useRef(null);
@@ -741,6 +742,33 @@ export default function App() {
     setInventoryRefreshToken((currentValue) => currentValue + 1);
   }
 
+  function handleBiddingToggleChange(vehicleId, isEnabled) {
+    if (!vehicleId) {
+      return;
+    }
+
+    setBiddingEnabledVehicleIds((currentValue) => {
+      if (isEnabled) {
+        if (currentValue[vehicleId]) {
+          return currentValue;
+        }
+
+        return {
+          ...currentValue,
+          [vehicleId]: true,
+        };
+      }
+
+      if (!currentValue[vehicleId]) {
+        return currentValue;
+      }
+
+      const nextValue = { ...currentValue };
+      delete nextValue[vehicleId];
+      return nextValue;
+    });
+  }
+
   async function handleVehicleDetailsWatchToggle() {
     if (!selectedVehicle || !watchMutationEndpoint) {
       return;
@@ -865,6 +893,7 @@ export default function App() {
           <>
             <InventorySection
               apiBaseUrl={API_BASE_URL}
+              biddingEnabledVehicleIds={biddingEnabledVehicleIds}
               bootstrapErrorMessage={bootstrapErrorMessage}
               collapseLabel="Watchlist"
               currentUserId={currentUserId}
@@ -881,6 +910,7 @@ export default function App() {
               isSectionCollapsed={isWatchlistCollapsed}
               keepPurchasedLast
               onBidPlaced={handleBidPlaced}
+              onBiddingToggleChange={handleBiddingToggleChange}
               onRequestBuyNow={handleRequestBuyNow}
               onWatchStateChanged={handleWatchStateChanged}
               onSelectVehicle={openVehicleDetails}
@@ -904,6 +934,7 @@ export default function App() {
 
             <InventorySection
               apiBaseUrl={API_BASE_URL}
+              biddingEnabledVehicleIds={biddingEnabledVehicleIds}
               bootstrapErrorMessage={bootstrapErrorMessage}
               currentUserId={currentUserId}
               emptyStateMessage="No vehicles match your criteria."
@@ -918,6 +949,7 @@ export default function App() {
               hiddenVehicleIds={soldVehicleIds}
               isBootstrapping={isBootstrapping}
               onBidPlaced={handleBidPlaced}
+              onBiddingToggleChange={handleBiddingToggleChange}
               onRequestBuyNow={handleRequestBuyNow}
               onWatchStateChanged={handleWatchStateChanged}
               onSelectVehicle={openVehicleDetails}
@@ -963,6 +995,9 @@ export default function App() {
           apiBaseUrl={API_BASE_URL}
           currentUserId={currentUserId}
           errorMessage={vehicleDetailsErrorMessage}
+          isBiddingEnabled={Boolean(
+            selectedVehicleId && biddingEnabledVehicleIds[selectedVehicleId],
+          )}
           isLoading={isVehicleDetailsLoading}
           isPurchased={Boolean(
             selectedVehicle &&
@@ -971,6 +1006,9 @@ export default function App() {
           )}
           isWatchPending={isVehicleDetailsWatchPending}
           onBidPlaced={handleBidPlaced}
+          onBiddingToggleChange={(isEnabled) =>
+            handleBiddingToggleChange(selectedVehicleId, isEnabled)
+          }
           onBuyNow={handleRequestBuyNow}
           onClose={closeVehicleDetails}
           onOpenImage={(images, activeIndex) =>

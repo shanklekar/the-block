@@ -83,6 +83,7 @@ function partitionPurchasedVehiclesLast(vehicles, purchasedVehicleIds) {
 
 export default function InventorySection({
   apiBaseUrl = "",
+  biddingEnabledVehicleIds = {},
   bootstrapErrorMessage,
   collapseLabel = "Section",
   currentUserId = null,
@@ -97,6 +98,7 @@ export default function InventorySection({
   isBootstrapping,
   keepPurchasedLast = false,
   onBidPlaced,
+  onBiddingToggleChange,
   onRequestBuyNow,
   onWatchStateChanged,
   onSelectVehicle,
@@ -560,6 +562,7 @@ export default function InventorySection({
     <InventoryResults
       apiBaseUrl={apiBaseUrl}
       activeFilterCount={activeFilterCount}
+      biddingEnabledVehicleIds={biddingEnabledVehicleIds}
       currentUserId={currentUserId}
       emptyStateMessage={emptyStateMessage}
       errorMessage={displayErrorMessage}
@@ -592,6 +595,7 @@ export default function InventorySection({
       isInitialLoading={isInitialLoading}
       isLoadingMore={isLoadingMore}
       onBidPlaced={onBidPlaced}
+      onBiddingToggleChange={onBiddingToggleChange}
       onRequestBuyNow={onRequestBuyNow}
       onSelectVehicle={onSelectVehicle}
       onSortChange={setSortOptionId}

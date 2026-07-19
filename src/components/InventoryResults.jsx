@@ -22,6 +22,7 @@ function LoadingCards() {
 export default function InventoryResults({
   apiBaseUrl = "",
   activeFilterCount,
+  biddingEnabledVehicleIds = {},
   collapseLabel = "Section",
   currentUserId = null,
   emptyStateMessage = "No vehicles match your criteria.",
@@ -35,6 +36,7 @@ export default function InventoryResults({
   isLoadingMore,
   isSectionCollapsed = false,
   onBidPlaced,
+  onBiddingToggleChange,
   onRequestBuyNow,
   onSelectVehicle,
   onSortChange,
@@ -134,12 +136,16 @@ export default function InventoryResults({
                 <VehicleCard
                   apiBaseUrl={apiBaseUrl}
                   currentUserId={currentUserId}
+                  isBiddingEnabled={Boolean(biddingEnabledVehicleIds[vehicle.id])}
                   isPurchased={Boolean(
                     vehicle.is_purchased_by_user || purchasedVehicleIds[vehicle.id],
                   )}
                   key={vehicle.id}
                   showInlineBidding={showInlineBidding}
                   onBidPlaced={onBidPlaced}
+                  onBiddingToggleChange={(isEnabled) =>
+                    onBiddingToggleChange?.(vehicle.id, isEnabled)
+                  }
                   onBuyNow={onRequestBuyNow}
                   onSelect={onSelectVehicle}
                   onToggleWatch={onToggleWatch}

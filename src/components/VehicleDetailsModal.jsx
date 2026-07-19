@@ -92,9 +92,11 @@ export default function VehicleDetailsModal({
   apiBaseUrl = "",
   currentUserId = null,
   errorMessage,
+  isBiddingEnabled = false,
   isPurchased = false,
   isLoading,
   onBidPlaced,
+  onBiddingToggleChange,
   purchaseMessage = "",
   isWatchPending = false,
   onBuyNow,
@@ -300,8 +302,10 @@ export default function VehicleDetailsModal({
                       apiBaseUrl={apiBaseUrl}
                       biddingState={biddingState}
                       displayVehicle={displayVehicle}
+                      isBiddingEnabled={isBiddingEnabled}
                       isPurchased={vehicleIsPurchased}
                       onBidPlaced={onBidPlaced}
+                      onBiddingToggleChange={onBiddingToggleChange}
                       stateErrorMessage={stateErrorMessage}
                       userId={currentUserId}
                       variant="detail"

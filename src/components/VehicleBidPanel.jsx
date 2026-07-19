@@ -20,8 +20,10 @@ export default function VehicleBidPanel({
   apiBaseUrl = "",
   biddingState,
   displayVehicle,
+  isBiddingEnabled = false,
   isPurchased = false,
   onBidPlaced,
+  onBiddingToggleChange,
   stateErrorMessage = "",
   userId,
   variant = "card",
@@ -32,7 +34,6 @@ export default function VehicleBidPanel({
   const [bidAmount, setBidAmount] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [hasBidInputError, setHasBidInputError] = useState(false);
-  const [isBiddingEnabled, setIsBiddingEnabled] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOptimisticallyHighBidder, setIsOptimisticallyHighBidder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -104,7 +105,6 @@ export default function VehicleBidPanel({
     setBidAmount(suggestedBidAmount);
     setErrorMessage("");
     setHasBidInputError(false);
-    setIsBiddingEnabled(false);
     setIsSubmitting(false);
     setIsOptimisticallyHighBidder(false);
     setSuccessMessage("");
@@ -236,7 +236,7 @@ export default function VehicleBidPanel({
     event.preventDefault();
 
     if (isGuardedSubmitState) {
-      setIsBiddingEnabled(true);
+      onBiddingToggleChange?.(true);
       setSuccessMessage("");
       return;
     }
@@ -269,7 +269,7 @@ export default function VehicleBidPanel({
             disabled={!canToggleBidding || isSubmitting}
             type="button"
             onClick={() => {
-              setIsBiddingEnabled((currentValue) => !currentValue);
+              onBiddingToggleChange?.(!isBiddingEnabled);
               setSuccessMessage("");
             }}
           >
