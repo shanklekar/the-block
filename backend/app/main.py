@@ -156,16 +156,11 @@ OPERATOR_SQL = {
     FilterOperator.GTE: ">= ?",
 }
 
-COMPUTED_SQL_FIELDS = {
-    "bid_amount": "COALESCE({prefix}current_bid, {prefix}starting_bid)",
-}
-
-SORT_SQL_FIELDS = {
+SORT_SQL_COLUMNS = {
     SortField.AUCTION_START: "auction_start",
     SortField.ODOMETER_KM: "odometer_km",
     SortField.BUY_NOW_PRICE: "buy_now_price",
     SortField.CONDITION_GRADE: "condition_grade",
-    SortField.CURRENT_PRICE: "COALESCE(current_bid, starting_bid)",
 }
 
 PURCHASED_SORT_SQL_FIELDS = {
@@ -213,12 +208,67 @@ def _shift_datetime_filter_value(value: Any, offset: timedelta) -> Any:
     return value
 
 
-def _get_sql_field_expression(field: str, *, prefix: str = "") -> str:
-    expression = COMPUTED_SQL_FIELDS.get(field)
-    if expression is not None:
-        return expression.format(prefix=prefix)
+def _qualify_sql_column(column: str, *, prefix: str = "") -> str:
+    return f"{prefix}{column}"
 
-    return f"{prefix}{field}"
+
+def _build_bid_count_subquery(vehicle_id_reference: str) -> str:
+    return f"""
+        SELECT COUNT(*)
+        FROM bids
+        WHERE bids.vehicle_id = {vehicle_id_reference}
+    """
+
+
+def _build_top_bid_value_subquery(vehicle_id_reference: str, column: str) -> str:
+    return f"""
+        SELECT bids.{column}
+        FROM bids
+        WHERE bids.vehicle_id = {vehicle_id_reference}
+        ORDER BY bids.current_bid DESC, bids.bid_placed_at DESC, bids.rowid DESC
+        LIMIT 1
+    """
+
+
+def _build_current_bid_subquery(vehicle_id_reference: str) -> str:
+    return _build_top_bid_value_subquery(vehicle_id_reference, "current_bid")
+
+
+def _build_current_high_bidder_user_id_subquery(vehicle_id_reference: str) -> str:
+    return _build_top_bid_value_subquery(vehicle_id_reference, "user_id")
+
+
+def _build_live_bid_select(*, prefix: str = "") -> str:
+    vehicle_id_reference = _qualify_sql_column("id", prefix=prefix)
+    return f"""
+        ({_build_current_bid_subquery(vehicle_id_reference)}) AS live_current_bid,
+        ({_build_bid_count_subquery(vehicle_id_reference)}) AS live_bid_count
+    """
+
+
+def _get_sql_field_expression(field: str, *, prefix: str = "") -> str:
+    vehicle_id_reference = _qualify_sql_column("id", prefix=prefix)
+
+    if field == "current_bid":
+        return f"({_build_current_bid_subquery(vehicle_id_reference)})"
+
+    if field == "bid_count":
+        return f"({_build_bid_count_subquery(vehicle_id_reference)})"
+
+    if field == "bid_amount":
+        return "COALESCE({}, {})".format(
+            _get_sql_field_expression("current_bid", prefix=prefix),
+            _qualify_sql_column("starting_bid", prefix=prefix),
+        )
+
+    return _qualify_sql_column(field, prefix=prefix)
+
+
+def _get_sort_sql_expression(sort_by: SortField, *, prefix: str = "") -> str:
+    if sort_by == SortField.CURRENT_PRICE:
+        return _get_sql_field_expression("bid_amount", prefix=prefix)
+
+    return _qualify_sql_column(SORT_SQL_COLUMNS[sort_by], prefix=prefix)
 
 
 def _translate_criteria_to_stored_timeline(
@@ -320,7 +370,7 @@ def build_order_clause(
     *,
     group_purchased_last: bool = False,
 ) -> str:
-    sort_expression = SORT_SQL_FIELDS[sort_by]
+    sort_expression = _get_sort_sql_expression(sort_by)
     direction = "ASC" if sort_direction == SortDirection.ASC else "DESC"
     order_fields: list[str] = []
 
@@ -494,16 +544,6 @@ def _is_vehicle_sold(connection: sqlite3.Connection, vehicle_id: str) -> bool:
     return row is not None
 
 
-def _build_current_high_bidder_user_id_subquery(vehicle_id_reference: str) -> str:
-    return f"""
-        SELECT bids.user_id
-        FROM bids
-        WHERE bids.vehicle_id = {vehicle_id_reference}
-        ORDER BY bids.current_bid DESC, bids.bid_placed_at DESC, bids.rowid DESC
-        LIMIT 1
-    """
-
-
 def _get_vehicle_bidding_row(
     connection: sqlite3.Connection,
     vehicle_id: str,
@@ -514,8 +554,8 @@ def _get_vehicle_bidding_row(
             vehicles.id,
             vehicles.auction_start,
             vehicles.starting_bid,
-            vehicles.current_bid,
-            vehicles.bid_count,
+            ({_build_current_bid_subquery("vehicles.id")}) AS current_bid,
+            ({_build_bid_count_subquery("vehicles.id")}) AS bid_count,
             ({_build_current_high_bidder_user_id_subquery("vehicles.id")}) AS high_bidder_user_id,
             EXISTS (
                 SELECT 1
@@ -728,9 +768,11 @@ def _build_vehicle_search_response(
         high_bidder_select, high_bidder_parameters = _build_is_high_bidder_select(
             payload.user_id
         )
+        live_bid_select = _build_live_bid_select(prefix="vehicles.")
         query = f"""
             SELECT
                 vehicles.*,
+                {live_bid_select},
                 {watch_select},
                 {purchase_select},
                 {purchased_by_user_select},
@@ -797,9 +839,11 @@ def _build_purchased_vehicle_search_response(
             payload.sort_by,
             payload.sort_direction,
         )
+        live_bid_select = _build_live_bid_select(prefix="vehicles.")
         query = f"""
             SELECT
                 vehicles.*,
+                {live_bid_select},
                 purchased.purchase_date,
                 purchased.purchase_amount
             FROM purchased
@@ -1202,7 +1246,6 @@ async def place_bid(
                     detail="Bid amount must be at least the minimum next bid",
                 )
 
-            next_bid_count = int(row["bid_count"]) + 1
             connection.execute(
                 """
                 INSERT INTO bids (
@@ -1214,20 +1257,13 @@ async def place_bid(
                 """,
                 [vehicle_id, user_id, payload.amount, bid_placed_at],
             )
-            connection.execute(
-                """
-                UPDATE vehicles
-                SET current_bid = ?, bid_count = ?
-                WHERE id = ?
-                """,
-                [payload.amount, next_bid_count, vehicle_id],
-            )
             _ensure_vehicle_is_watched(
                 connection,
                 user_id=user_id,
                 vehicle_id=vehicle_id,
             )
             connection.commit()
+            bidding_state = _load_bidding_state(connection, vehicle_id, user_id=user_id)
         except HTTPException:
             connection.rollback()
             raise
@@ -1239,8 +1275,8 @@ async def place_bid(
         user_id=user_id,
         vehicle_id=vehicle_id,
         amount=payload.amount,
-        current_bid=payload.amount,
-        bid_count=next_bid_count,
+        current_bid=bidding_state.current_bid or payload.amount,
+        bid_count=bidding_state.bid_count,
         bid_placed_at=bid_placed_at,
     )
     await _broadcast_bidding_state(vehicle_id)
@@ -1431,15 +1467,17 @@ def get_vehicle(
         _build_is_purchased_by_user_select(user_id)
     )
     high_bidder_select, high_bidder_parameters = _build_is_high_bidder_select(user_id)
+    live_bid_select = _build_live_bid_select(prefix="vehicles.")
     select_clause = (
         "vehicles.*, "
-        f"0 AS is_watched, {purchase_select}, {purchased_by_user_select}, {high_bidder_select}"
+        f"{live_bid_select}, 0 AS is_watched, {purchase_select}, {purchased_by_user_select}, {high_bidder_select}"
     )
     query_parameters: list[Any] = [vehicle_id]
 
     if user_id is not None:
         select_clause = f"""
             vehicles.*,
+            {live_bid_select},
             EXISTS (
                 SELECT 1
                 FROM watching

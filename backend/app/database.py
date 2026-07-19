@@ -65,6 +65,10 @@ def serialize_vehicle(
     auction_start_offset: timedelta | None = None,
 ) -> dict[str, Any]:
     vehicle = dict(row)
+    if "live_current_bid" in vehicle:
+        vehicle["current_bid"] = vehicle.pop("live_current_bid")
+    if "live_bid_count" in vehicle:
+        vehicle["bid_count"] = vehicle.pop("live_bid_count")
     vehicle.pop("reserve_price", None)
     vehicle["damage_notes"] = _parse_json_column(vehicle.get("damage_notes"))
     vehicle["images"] = _parse_json_column(vehicle.get("images"))

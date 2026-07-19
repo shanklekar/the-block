@@ -39,9 +39,7 @@ CREATE TABLE vehicles (
     buy_now_price REAL,
     images TEXT NOT NULL,
     selling_dealership TEXT,
-    lot TEXT,
-    current_bid REAL,
-    bid_count INTEGER NOT NULL
+    lot TEXT
 );
 """
 
@@ -74,9 +72,7 @@ INSERT INTO vehicles (
     buy_now_price,
     images,
     selling_dealership,
-    lot,
-    current_bid,
-    bid_count
+    lot
 ) VALUES (
     :id,
     :vin,
@@ -104,9 +100,7 @@ INSERT INTO vehicles (
     :buy_now_price,
     :images,
     :selling_dealership,
-    :lot,
-    :current_bid,
-    :bid_count
+    :lot
 );
 """
 
@@ -118,6 +112,8 @@ def load_vehicles():
 
 def serialize_vehicle(vehicle):
     record = dict(vehicle)
+    record.pop("current_bid", None)
+    record.pop("bid_count", None)
     record["damage_notes"] = json.dumps(vehicle["damage_notes"])
     record["images"] = json.dumps(vehicle["images"])
     return record
