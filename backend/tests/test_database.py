@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import timedelta
 
 from backend.app import database
@@ -66,3 +67,29 @@ class DatabaseUtilitiesTests(BackendDatabaseTestCase):
         self.assertEqual(serialized["damage_notes"], ["Scratch on tailgate"])
         self.assertEqual(serialized["images"], ["https://example.com/started-1.jpg"])
         self.assertEqual(serialized["auction_start"], "2024-01-02T00:00:00")
+
+    def test_watching_table_enforces_unique_user_vehicle_pairs(self) -> None:
+        with self.connect() as connection:
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "INSERT INTO watching (user_id, vehicle_id) VALUES (?, ?)",
+                    [1, "veh-started"],
+                )
+
+    def test_insert_or_ignore_keeps_watching_rows_unique(self) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO watching (user_id, vehicle_id) VALUES (?, ?)",
+                [1, "veh-started"],
+            )
+            connection.commit()
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM watching
+                WHERE user_id = ? AND vehicle_id = ?
+                """,
+                [1, "veh-started"],
+            ).fetchone()
+
+        self.assertEqual(row["total"], 1)

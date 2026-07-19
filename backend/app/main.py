@@ -740,23 +740,9 @@ def _ensure_vehicle_is_watched(
     user_id: int,
     vehicle_id: str,
 ) -> None:
-    existing_watch = connection.execute(
-        """
-        SELECT 1
-        FROM watching
-        WHERE user_id = ?
-          AND vehicle_id = ?
-        LIMIT 1
-        """,
-        [user_id, vehicle_id],
-    ).fetchone()
-
-    if existing_watch is not None:
-        return
-
     connection.execute(
         """
-        INSERT INTO watching (user_id, vehicle_id)
+        INSERT OR IGNORE INTO watching (user_id, vehicle_id)
         VALUES (?, ?)
         """,
         [user_id, vehicle_id],
@@ -1243,27 +1229,15 @@ def mutate_watching(
         if not _vehicle_exists(connection, payload.vehicle_id):
             raise HTTPException(status_code=404, detail="Vehicle not found")
 
-        existing_watch = connection.execute(
-            """
-            SELECT id
-            FROM watching
-            WHERE user_id = ?
-              AND vehicle_id = ?
-            LIMIT 1
-            """,
-            [user_id, payload.vehicle_id],
-        ).fetchone()
-
         if payload.watch:
-            if existing_watch is None:
-                connection.execute(
-                    """
-                    INSERT INTO watching (user_id, vehicle_id)
-                    VALUES (?, ?)
-                    """,
-                    [user_id, payload.vehicle_id],
-                )
-                connection.commit()
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO watching (user_id, vehicle_id)
+                VALUES (?, ?)
+                """,
+                [user_id, payload.vehicle_id],
+            )
+            connection.commit()
             is_watched = True
         else:
             connection.execute(

@@ -15,6 +15,8 @@ CREATE TABLE watching (
     user_id INTEGER NOT NULL,
     vehicle_id TEXT NOT NULL
 );
+CREATE UNIQUE INDEX watching_user_vehicle_unique
+    ON watching (user_id, vehicle_id);
 """
 
 

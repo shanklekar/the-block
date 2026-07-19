@@ -229,6 +229,26 @@ class ApiEndpointTests(BackendApiTestCase):
 
         self.assertEqual(watches["total"], 0)
 
+    def test_ensure_vehicle_is_watched_is_idempotent(self) -> None:
+        with self.connect() as connection:
+            main._ensure_vehicle_is_watched(
+                connection,
+                user_id=1,
+                vehicle_id="veh-started",
+            )
+            main._ensure_vehicle_is_watched(
+                connection,
+                user_id=1,
+                vehicle_id="veh-started",
+            )
+            connection.commit()
+            watches = connection.execute(
+                "SELECT COUNT(*) AS total FROM watching WHERE user_id = ? AND vehicle_id = ?",
+                [1, "veh-started"],
+            ).fetchone()
+
+        self.assertEqual(watches["total"], 1)
+
     def test_get_bidding_state_reports_started_future_and_high_bidder_status(self) -> None:
         started_response = self.client.get(
             "/api/vehicles/veh-started/bidding-state",
