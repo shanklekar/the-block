@@ -22,6 +22,7 @@ function LoadingCards() {
 export default function InventoryResults({
   apiBaseUrl = "",
   activeFilterCount,
+  collapseLabel = "Section",
   currentUserId = null,
   emptyStateMessage = "No vehicles match your criteria.",
   errorMessage,
@@ -32,17 +33,20 @@ export default function InventoryResults({
   isBootstrapping,
   isInitialLoading,
   isLoadingMore,
+  isSectionCollapsed = false,
   onBidPlaced,
   onRequestBuyNow,
   onSelectVehicle,
   onSortChange,
   onToggleWatch,
   onToggleFilters,
+  onToggleSectionCollapsed,
   onVehicleLiveStateChange,
   panelLabel = "Live search results",
   purchasedVehicleIds = {},
   pendingWatchVehicleIds = [],
   resultsSentinelRef,
+  sectionCollapseEnabled = false,
   sortLabel = "Sort by",
   sortOptionId,
   showInlineBidding = false,
@@ -56,13 +60,25 @@ export default function InventoryResults({
     !isBootstrapping && !isInitialLoading && !errorMessage && vehicles.length === 0;
 
   return (
-    <section className="inventory-results">
+    <section
+      className={`inventory-results ${isSectionCollapsed ? "is-collapsed" : ""}`.trim()}
+    >
       <header className="inventory-results-header">
         <div>
           <p className="inventory-panel-label">{panelLabel}</p>
           <h2>{title}</h2>
         </div>
         <div className="inventory-results-meta">
+          {sectionCollapseEnabled ? (
+            <button
+              aria-expanded={!isSectionCollapsed}
+              className="inventory-section-toggle"
+              type="button"
+              onClick={onToggleSectionCollapsed}
+            >
+              {isSectionCollapsed ? `Expand ${collapseLabel}` : `Collapse ${collapseLabel}`}
+            </button>
+          ) : null}
           <div className="inventory-results-controls">
             <button
               aria-controls={filterPanelId}
@@ -99,59 +115,63 @@ export default function InventoryResults({
         </div>
       </header>
 
-      {filtersPanel}
+      {!isSectionCollapsed ? (
+        <>
+          {filtersPanel}
 
-      {errorMessage ? <div className="inventory-feedback error">{errorMessage}</div> : null}
-      {watchMutationErrorMessage ? (
-        <div className="inventory-inline-message" role="status">
-          {watchMutationErrorMessage}
-        </div>
-      ) : null}
-
-      {isBootstrapping || isInitialLoading ? <LoadingCards /> : null}
-
-      {!isBootstrapping && !isInitialLoading && vehicles.length > 0 ? (
-        <div className="vehicle-grid">
-          {vehicles.map((vehicle) => (
-            <VehicleCard
-              apiBaseUrl={apiBaseUrl}
-              currentUserId={currentUserId}
-              isPurchased={Boolean(
-                vehicle.is_purchased_by_user || purchasedVehicleIds[vehicle.id],
-              )}
-              key={vehicle.id}
-              showInlineBidding={showInlineBidding}
-              onBidPlaced={onBidPlaced}
-              onBuyNow={onRequestBuyNow}
-              onSelect={onSelectVehicle}
-              onToggleWatch={onToggleWatch}
-              onVehicleLiveStateChange={onVehicleLiveStateChange}
-              showWatchToggle={watchToggleEnabled}
-              watchTogglePending={pendingWatchVehicleIds.includes(vehicle.id)}
-              vehicle={vehicle}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {showEmptyState ? (
-        <div className="inventory-feedback empty">{emptyStateMessage}</div>
-      ) : null}
-
-      {!showEmptyState && vehicles.length > 0 ? (
-        <div className="inventory-scroll-status">
-          {isLoadingMore ? (
-            <span className="inventory-results-pill inventory-results-pill-active">
-              Loading more vehicles...
-            </span>
+          {errorMessage ? <div className="inventory-feedback error">{errorMessage}</div> : null}
+          {watchMutationErrorMessage ? (
+            <div className="inventory-inline-message" role="status">
+              {watchMutationErrorMessage}
+            </div>
           ) : null}
-          {!hasMore ? (
-            <span className="inventory-results-pill">You&apos;ve reached the end.</span>
-          ) : null}
-        </div>
-      ) : null}
 
-      <div className="inventory-results-sentinel" ref={resultsSentinelRef} />
+          {isBootstrapping || isInitialLoading ? <LoadingCards /> : null}
+
+          {!isBootstrapping && !isInitialLoading && vehicles.length > 0 ? (
+            <div className="vehicle-grid">
+              {vehicles.map((vehicle) => (
+                <VehicleCard
+                  apiBaseUrl={apiBaseUrl}
+                  currentUserId={currentUserId}
+                  isPurchased={Boolean(
+                    vehicle.is_purchased_by_user || purchasedVehicleIds[vehicle.id],
+                  )}
+                  key={vehicle.id}
+                  showInlineBidding={showInlineBidding}
+                  onBidPlaced={onBidPlaced}
+                  onBuyNow={onRequestBuyNow}
+                  onSelect={onSelectVehicle}
+                  onToggleWatch={onToggleWatch}
+                  onVehicleLiveStateChange={onVehicleLiveStateChange}
+                  showWatchToggle={watchToggleEnabled}
+                  watchTogglePending={pendingWatchVehicleIds.includes(vehicle.id)}
+                  vehicle={vehicle}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {showEmptyState ? (
+            <div className="inventory-feedback empty">{emptyStateMessage}</div>
+          ) : null}
+
+          {!showEmptyState && vehicles.length > 0 ? (
+            <div className="inventory-scroll-status">
+              {isLoadingMore ? (
+                <span className="inventory-results-pill inventory-results-pill-active">
+                  Loading more vehicles...
+                </span>
+              ) : null}
+              {!hasMore ? (
+                <span className="inventory-results-pill">You&apos;ve reached the end.</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="inventory-results-sentinel" ref={resultsSentinelRef} />
+        </>
+      ) : null}
     </section>
   );
 }

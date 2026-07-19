@@ -17,6 +17,7 @@ const SEARCH_VIEW = "search";
 const PURCHASED_VIEW = "purchased";
 const PURCHASED_VEHICLES_SEGMENT = "purchased_vehicles";
 const APP_BASE_PATH = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+const WATCHLIST_COLLAPSED_STORAGE_KEY = "block.watchlist.collapsed";
 
 function normalizePathname(pathname = "/") {
   if (!pathname) {
@@ -47,6 +48,13 @@ function readActiveViewFromUrl(location = window.location) {
 
 export default function App() {
   const [activeView, setActiveView] = useState(() => readActiveViewFromUrl());
+  const [isWatchlistCollapsed, setIsWatchlistCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(WATCHLIST_COLLAPSED_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [filterSchema, setFilterSchema] = useState(null);
   const [filterMetadata, setFilterMetadata] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -206,6 +214,17 @@ export default function App() {
   useEffect(() => {
     syncViewUrl(activeView, { replace: true });
   }, [activeView]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        WATCHLIST_COLLAPSED_STORAGE_KEY,
+        String(isWatchlistCollapsed),
+      );
+    } catch {
+      // Ignore storage failures and keep the in-memory preference.
+    }
+  }, [isWatchlistCollapsed]);
 
   useEffect(() => {
     if (!selectedVehicleId) {
@@ -648,6 +667,7 @@ export default function App() {
             <InventorySection
               apiBaseUrl={API_BASE_URL}
               bootstrapErrorMessage={bootstrapErrorMessage}
+              collapseLabel="Watchlist"
               currentUserId={CURRENT_USER_ID}
               emptyStateMessage="No watched vehicles match your criteria."
               enableWatchToggle
@@ -659,15 +679,20 @@ export default function App() {
               filtersTitle="Refine watchlist"
               hiddenVehicleIds={soldVehicleIds}
               isBootstrapping={isBootstrapping}
+              isSectionCollapsed={isWatchlistCollapsed}
               keepPurchasedLast
               onBidPlaced={handleBidPlaced}
               onRequestBuyNow={handleRequestBuyNow}
               onWatchStateChanged={handleWatchStateChanged}
               onSelectVehicle={openVehicleDetails}
+              onToggleSectionCollapsed={() =>
+                setIsWatchlistCollapsed((currentCollapsed) => !currentCollapsed)
+              }
               panelLabel="Watchlist"
               purchasedVehicleIds={purchasedVehicleIds}
               refreshToken={inventoryRefreshToken}
               searchEndpoint={`${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching/vehicles/search`}
+              sectionCollapseEnabled
               showInlineBidding
               watchMutationEndpoint={WATCH_MUTATION_ENDPOINT}
               sectionTitle={(totalVehicles) =>

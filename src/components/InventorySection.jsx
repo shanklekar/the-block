@@ -84,6 +84,7 @@ function partitionPurchasedVehiclesLast(vehicles, purchasedVehicleIds) {
 export default function InventorySection({
   apiBaseUrl = "",
   bootstrapErrorMessage,
+  collapseLabel = "Section",
   currentUserId = null,
   enableWatchToggle = false,
   filterMetadata,
@@ -108,7 +109,10 @@ export default function InventorySection({
   sortLabel,
   emptyStateMessage,
   hiddenVehicleIds = {},
+  isSectionCollapsed = false,
   watchMutationEndpoint = "",
+  onToggleSectionCollapsed,
+  sectionCollapseEnabled = false,
 }) {
   const [filters, setFilters] = useState(createDefaultFilters);
   const [vehicles, setVehicles] = useState([]);
@@ -561,24 +565,26 @@ export default function InventorySection({
       filterPanelId={filterPanelId}
       filtersOpen={filtersOpen}
       filtersPanel={
-        <InventoryFilters
-          allowedFields={allowedFields}
-          criteria={criteria}
-          filterGroups={FILTER_GROUPS}
-          filterMetadata={filterMetadata}
-          filters={filters}
-          isBootstrapping={isBootstrapping}
-          isOpen={filtersOpen}
-          onClearFilters={clearFilters}
-          onClose={() => setFiltersOpen(false)}
-          onDateChange={updateDateFilter}
-          onFlagChange={updateFlagFilter}
-          onRangeChange={updateRangeFilter}
-          onTextChange={updateTextFilter}
-          onToggleCategorical={toggleCategoricalFilter}
-          optionsEndpoint={filterOptionsEndpoint}
-          panelId={filterPanelId}
-        />
+        isSectionCollapsed ? null : (
+          <InventoryFilters
+            allowedFields={allowedFields}
+            criteria={criteria}
+            filterGroups={FILTER_GROUPS}
+            filterMetadata={filterMetadata}
+            filters={filters}
+            isBootstrapping={isBootstrapping}
+            isOpen={filtersOpen}
+            onClearFilters={clearFilters}
+            onClose={() => setFiltersOpen(false)}
+            onDateChange={updateDateFilter}
+            onFlagChange={updateFlagFilter}
+            onRangeChange={updateRangeFilter}
+            onTextChange={updateTextFilter}
+            onToggleCategorical={toggleCategoricalFilter}
+            optionsEndpoint={filterOptionsEndpoint}
+            panelId={filterPanelId}
+          />
+        )
       }
       hasMore={hasMore}
       isBootstrapping={isBootstrapping}
@@ -590,11 +596,15 @@ export default function InventorySection({
       onSortChange={setSortOptionId}
       onToggleWatch={handleToggleWatch}
       onToggleFilters={() => setFiltersOpen((currentOpen) => !currentOpen)}
+      onToggleSectionCollapsed={onToggleSectionCollapsed}
       onVehicleLiveStateChange={keepPurchasedLast ? handleVehicleLiveStateChange : undefined}
+      collapseLabel={collapseLabel}
+      isSectionCollapsed={isSectionCollapsed}
       panelLabel={panelLabel}
       purchasedVehicleIds={purchasedVehicleIds}
       pendingWatchVehicleIds={pendingWatchVehicleIds}
       resultsSentinelRef={resultsSentinelRef}
+      sectionCollapseEnabled={sectionCollapseEnabled}
       sortLabel={sortLabel}
       sortOptionId={sortOptionId}
       showInlineBidding={showInlineBidding}
