@@ -29,6 +29,7 @@ export default function VehicleBidPanel({
   const [bidAmount, setBidAmount] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [hasBidInputError, setHasBidInputError] = useState(false);
+  const [isBiddingEnabled, setIsBiddingEnabled] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOptimisticallyHighBidder, setIsOptimisticallyHighBidder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -42,7 +43,9 @@ export default function VehicleBidPanel({
       biddingState?.is_high_bidder ||
       displayVehicle?.is_high_bidder,
   );
+  const canToggleBidding = auctionStarted && !isSold && !isPurchasedByUser;
   const canSubmit = auctionStarted && !isSold && !isPurchasedByUser && !isHighBidder;
+  const isGuardedSubmitState = canSubmit && !isSubmitting && !isBiddingEnabled;
   const parsedBidAmount = parseBidAmount(bidAmount);
   const bidButtonAmount = parsedBidAmount ?? minimumNextBid;
   const displayBid = displayVehicle?.current_bid ?? displayVehicle?.starting_bid ?? null;
@@ -59,7 +62,14 @@ export default function VehicleBidPanel({
     .join(" ");
   const submitButtonClassName = [
     "bid-submit-button",
+    isGuardedSubmitState ? "is-guarded" : "",
     isHighBidder ? "is-high-bidder" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const biddingToggleClassName = [
+    "vehicle-bid-toggle",
+    isBiddingEnabled ? "is-active" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -82,6 +92,7 @@ export default function VehicleBidPanel({
     setBidAmount(minimumNextBid ? String(Math.round(minimumNextBid)) : "");
     setErrorMessage("");
     setHasBidInputError(false);
+    setIsBiddingEnabled(false);
     setIsSubmitting(false);
     setIsOptimisticallyHighBidder(false);
     setSuccessMessage("");
@@ -128,9 +139,7 @@ export default function VehicleBidPanel({
     };
   }, []);
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-
+  async function submitBid() {
     if (!displayVehicle?.id || !canSubmit || parsedBidAmount === null) {
       return;
     }
@@ -178,6 +187,18 @@ export default function VehicleBidPanel({
     }
   }
 
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (isGuardedSubmitState) {
+      setIsBiddingEnabled(true);
+      setSuccessMessage("");
+      return;
+    }
+
+    await submitBid();
+  }
+
   if (!auctionStarted) {
     return null;
   }
@@ -193,6 +214,8 @@ export default function VehicleBidPanel({
   let submitButtonLabel = `Bid now ${formatCurrency(bidButtonAmount)}`;
   if (isSubmitting) {
     submitButtonLabel = "Submitting bid...";
+  } else if (isGuardedSubmitState) {
+    submitButtonLabel = "Toggle bidding";
   } else if (isHighBidder) {
     submitButtonLabel = "You are the highest bidder";
   }
@@ -200,7 +223,27 @@ export default function VehicleBidPanel({
   return (
     <section className={panelClassName}>
       <div className="vehicle-bid-panel-header">
-        <p className="inventory-panel-label">Live bidding</p>
+        <div className="vehicle-bid-panel-header-row">
+          <p className="inventory-panel-label">Live bidding</p>
+          <button
+            aria-label={isBiddingEnabled ? "Disable bidding" : "Enable bidding"}
+            aria-pressed={isBiddingEnabled}
+            className={biddingToggleClassName}
+            disabled={!canToggleBidding || isSubmitting}
+            type="button"
+            onClick={() => {
+              setIsBiddingEnabled((currentValue) => !currentValue);
+              setSuccessMessage("");
+            }}
+          >
+            <span className="vehicle-bid-toggle-track" aria-hidden="true">
+              <span className="vehicle-bid-toggle-thumb" />
+            </span>
+            <span className="vehicle-bid-toggle-label">
+              {isBiddingEnabled ? "Bidding on" : "Bidding off"}
+            </span>
+          </button>
+        </div>
         <div className="vehicle-bid-panel-auction-block">
           <span className="vehicle-bid-panel-auction-label">Auction Start Time:</span>
           <span className="vehicle-bid-panel-auction">{auctionStartTime}</span>
@@ -279,8 +322,12 @@ export default function VehicleBidPanel({
 
         <button
           className={submitButtonClassName}
-          disabled={!canSubmit || isSubmitting || parsedBidAmount === null}
-          type="submit"
+          disabled={
+            !isGuardedSubmitState &&
+            (!canSubmit || isSubmitting || parsedBidAmount === null)
+          }
+          type="button"
+          onClick={handleSubmit}
         >
           {submitButtonLabel}
         </button>

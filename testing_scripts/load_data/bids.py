@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -42,23 +42,33 @@ def load_vehicles():
         return json.load(source_file)
 
 
-def serialize_bid(vehicle, bid_placed_at):
-    return {
-        "vehicle_id": vehicle["id"],
-        "user_id": 0,
-        "current_bid": vehicle["current_bid"],
-        "bid_placed_at": bid_placed_at,
-    }
+def serialize_bids(vehicle, latest_bid_placed_at):
+    current_bid = vehicle.get("current_bid")
+    bid_count = int(vehicle.get("bid_count") or 0)
+    if current_bid is None or bid_count <= 0:
+        return []
+
+    bids = []
+    for offset in range(bid_count):
+        bid_placed_at = latest_bid_placed_at - timedelta(seconds=bid_count - offset - 1)
+        bids.append(
+            {
+                "vehicle_id": vehicle["id"],
+                "user_id": 0,
+                "current_bid": current_bid - (100 * (bid_count - offset - 1)),
+                "bid_placed_at": bid_placed_at.isoformat(timespec="seconds"),
+            }
+        )
+
+    return bids
 
 
 def main():
     vehicles = load_vehicles()
-    bid_placed_at = datetime.now().isoformat(timespec="seconds")
-    bids = [
-        serialize_bid(vehicle, bid_placed_at)
-        for vehicle in vehicles
-        if vehicle.get("current_bid") is not None
-    ]
+    latest_bid_placed_at = datetime.now()
+    bids = []
+    for vehicle in vehicles:
+        bids.extend(serialize_bids(vehicle, latest_bid_placed_at))
 
     with sqlite3.connect(DATABASE_PATH) as connection:
         cursor = connection.cursor()
