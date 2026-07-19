@@ -432,12 +432,56 @@ export function formatAuctionDate(value) {
     return "Schedule unavailable";
   }
 
+  const timestamp = new Date(value);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return value;
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(timestamp);
+}
+
+export function formatAuctionCountdown(value, now = Date.now()) {
+  if (!value) {
+    return "";
+  }
+
+  const auctionStart = new Date(value);
+  const currentTime = now instanceof Date ? now.getTime() : now;
+
+  if (Number.isNaN(auctionStart.getTime()) || Number.isNaN(currentTime)) {
+    return "";
+  }
+
+  const remainingMs = auctionStart.getTime() - currentTime;
+
+  if (remainingMs <= 0) {
+    return "";
+  }
+
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+
+  if (remainingMs > 48 * hourMs) {
+    const daysRemaining = Math.floor(remainingMs / dayMs);
+    return `${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
+  }
+
+  if (remainingMs < 10 * hourMs) {
+    const totalMinutesRemaining = Math.max(0, Math.floor(remainingMs / minuteMs));
+    const hoursRemaining = Math.floor(totalMinutesRemaining / 60);
+    const minutesRemaining = totalMinutesRemaining % 60;
+    return `${hoursRemaining}h ${minutesRemaining}m`;
+  }
+
+  const hoursRemaining = Math.floor(remainingMs / hourMs);
+  return `${hoursRemaining} hour${hoursRemaining === 1 ? "" : "s"}`;
 }
 
 export function formatAuctionScheduleSpan(value) {

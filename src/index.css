@@ -1168,6 +1168,24 @@ img {
   font-weight: 600;
 }
 
+.vehicle-card-spec-value {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.vehicle-card-countdown {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .buy-now-button {
   width: 100%;
   border: 0;

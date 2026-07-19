@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  formatAuctionCountdown,
   formatAuctionDate,
   formatConditionGrade,
   formatMilesFromKm,
@@ -124,6 +125,8 @@ export default function VehicleCard({
   );
   const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
   const hasVin = Boolean(displayVehicle.vin);
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
+  const auctionCountdown = formatAuctionCountdown(displayVehicle.auction_start, countdownNow);
 
   useEffect(() => {
     return () => {
@@ -132,6 +135,28 @@ export default function VehicleCard({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!displayVehicle?.auction_start || showBidPanel) {
+      return undefined;
+    }
+
+    const auctionStart = new Date(displayVehicle.auction_start);
+
+    if (Number.isNaN(auctionStart.getTime()) || auctionStart.getTime() <= Date.now()) {
+      return undefined;
+    }
+
+    setCountdownNow(Date.now());
+
+    const intervalId = window.setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 30_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [displayVehicle?.auction_start, showBidPanel]);
 
   useEffect(() => {
     if (!onVehicleLiveStateChange || !displayVehicle?.id) {
@@ -273,7 +298,12 @@ export default function VehicleCard({
           <dl className="vehicle-card-specs">
             <div className="vehicle-card-spec-row">
               <dt>Auction start</dt>
-              <dd>{formatAuctionDate(displayVehicle.auction_start)}</dd>
+              <dd className="vehicle-card-spec-value">
+                <span>{formatAuctionDate(displayVehicle.auction_start)}</span>
+                {auctionCountdown ? (
+                  <span className="vehicle-card-countdown">({auctionCountdown})</span>
+                ) : null}
+              </dd>
             </div>
           </dl>
         ) : null}
