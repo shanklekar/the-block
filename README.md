@@ -4,6 +4,19 @@
 
 Use the repository root for all commands below. This app has a React/Vite frontend, a FastAPI backend, and a SQLite database at `data/vehicles.sqlite`.
 
+If you want the repo to handle setup and local startup for you, use the automated helper:
+
+```bash
+./dev.sh setup
+./dev.sh start
+```
+
+Or run everything in one step:
+
+```bash
+./dev.sh all
+```
+
 ### 1. Prerequisites
 
 Make sure these are installed locally:
