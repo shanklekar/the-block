@@ -7,6 +7,7 @@ import {
 import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
 import BuyNowButton from "./BuyNowButton";
 import VehicleBidPanel from "./VehicleBidPanel";
+import VehicleShareButton from "./VehicleShareButton";
 import WatchToggleButton from "./WatchToggleButton";
 
 function getTitleStatusBadgeClassName(titleStatus) {
@@ -252,6 +253,13 @@ export default function VehicleCard({
               >
                 {isVinCopied ? <CopiedIcon /> : <CopyIcon />}
               </button>
+              <VehicleShareButton
+                stopPropagation
+                variant="card-inline"
+                vehicleId={displayVehicle.id}
+                vehicleTitle={vehicleTitle}
+                vin={displayVehicle.vin}
+              />
             </div>
           ) : null}
         </div>

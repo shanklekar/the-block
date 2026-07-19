@@ -6,6 +6,7 @@ import OpenlaneLogo from "./components/OpenlaneLogo";
 import PurchasedVehiclesSection from "./components/PurchasedVehiclesSection";
 import VehicleDetailsModal from "./components/VehicleDetailsModal";
 import VehicleImageLightbox from "./components/VehicleImageLightbox";
+import { buildVehicleHistoryPath, readSharedVehicleId } from "./vehicleShare";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
@@ -20,7 +21,7 @@ export default function App() {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapErrorMessage, setBootstrapErrorMessage] = useState("");
   const [inventoryRefreshToken, setInventoryRefreshToken] = useState(0);
-  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState(() => readSharedVehicleId());
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [isVehicleDetailsLoading, setIsVehicleDetailsLoading] = useState(false);
   const [vehicleDetailsErrorMessage, setVehicleDetailsErrorMessage] = useState("");
@@ -36,6 +37,47 @@ export default function App() {
   const [soldVehicleIds, setSoldVehicleIds] = useState({});
 
   const vehicleDetailsRequestRef = useRef(null);
+
+  function syncVehicleUrl(vehicleId = "", { replace = false } = {}) {
+    const nextPath = buildVehicleHistoryPath(vehicleId);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    if (nextPath === currentPath) {
+      return;
+    }
+
+    const method = replace ? "replaceState" : "pushState";
+    window.history[method](null, "", nextPath);
+  }
+
+  function resetVehicleDetailsState() {
+    vehicleDetailsRequestRef.current?.abort();
+    setSelectedVehicleId("");
+    setSelectedVehicle(null);
+    setIsVehicleDetailsLoading(false);
+    setVehicleDetailsErrorMessage("");
+    setVehicleDetailsWatchErrorMessage("");
+    setVehicleDetailsPurchaseMessage("");
+    setIsVehicleDetailsWatchPending(false);
+  }
+
+  function syncSelectedVehicleFromUrl() {
+    const nextVehicleId = readSharedVehicleId();
+
+    setLightboxState(null);
+    setBuyNowVehicle(null);
+
+    if (!nextVehicleId) {
+      resetVehicleDetailsState();
+      return;
+    }
+
+    setVehicleDetailsErrorMessage("");
+    setVehicleDetailsWatchErrorMessage("");
+    setVehicleDetailsPurchaseMessage("");
+    setIsVehicleDetailsWatchPending(false);
+    setSelectedVehicleId(nextVehicleId);
+  }
 
   async function fetchVehicleDetails(vehicleId, signal) {
     const response = await fetch(
@@ -95,6 +137,18 @@ export default function App() {
 
     return () => {
       controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      syncSelectedVehicleFromUrl();
+    }
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
     };
   }, []);
 
@@ -198,9 +252,7 @@ export default function App() {
         return;
       }
 
-      setSelectedVehicleId("");
-      setSelectedVehicle(null);
-      setVehicleDetailsErrorMessage("");
+      closeVehicleDetails();
     }
 
     window.addEventListener("keydown", handleEscape);
@@ -272,22 +324,27 @@ export default function App() {
   }
 
   function openVehicleDetails(vehicleId) {
-    console.log("[VehicleDetailsModal] Open vehicle:", vehicleId);
+    const normalizedVehicleId = String(vehicleId ?? "").trim();
+
+    if (!normalizedVehicleId) {
+      return;
+    }
+
+    const hasVehicleInUrl = Boolean(readSharedVehicleId());
+
+    syncVehicleUrl(normalizedVehicleId, {
+      replace: hasVehicleInUrl,
+    });
     setLightboxState(null);
     setVehicleDetailsPurchaseMessage("");
-    setSelectedVehicleId(vehicleId);
+    setSelectedVehicleId(normalizedVehicleId);
   }
 
   function closeVehicleDetails() {
-    vehicleDetailsRequestRef.current?.abort();
     setLightboxState(null);
-    setSelectedVehicleId("");
-    setSelectedVehicle(null);
-    setIsVehicleDetailsLoading(false);
-    setVehicleDetailsErrorMessage("");
-    setVehicleDetailsWatchErrorMessage("");
-    setVehicleDetailsPurchaseMessage("");
-    setIsVehicleDetailsWatchPending(false);
+    setBuyNowVehicle(null);
+    resetVehicleDetailsState();
+    syncVehicleUrl("", { replace: true });
   }
 
   function handleRequestBuyNow(vehicle) {

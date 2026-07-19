@@ -3,6 +3,7 @@ import { formatConditionGrade, formatMilesFromKm } from "../inventoryConfig";
 import { useVehicleLiveBidding } from "../useVehicleLiveBidding";
 import BuyNowButton from "./BuyNowButton";
 import VehicleBidPanel from "./VehicleBidPanel";
+import VehicleShareButton from "./VehicleShareButton";
 import WatchToggleButton from "./WatchToggleButton";
 
 function getTitleStatusBadgeClassName(titleStatus) {
@@ -190,16 +191,26 @@ export default function VehicleDetailsModal({
             {displayVehicle ? <h2>{vehicleTitle}</h2> : null}
           </div>
           <div className="vehicle-detail-header-actions">
-            {displayVehicle ? (
-              <WatchToggleButton
-                className="vehicle-watch-toggle-detail"
-                disabled={isWatchPending}
-                isWatched={isWatched}
-                label={watchToggleLabel}
-                onToggle={onToggleWatch}
-                variant="modal-header"
-              />
-            ) : null}
+            <div className="vehicle-detail-header-primary-actions">
+              {displayVehicle ? (
+                <WatchToggleButton
+                  className="vehicle-watch-toggle-detail"
+                  disabled={isWatchPending}
+                  isWatched={isWatched}
+                  label={watchToggleLabel}
+                  onToggle={onToggleWatch}
+                  variant="modal-header"
+                />
+              ) : null}
+              {displayVehicle ? (
+                <VehicleShareButton
+                  variant="modal-header"
+                  vehicleId={displayVehicle.id}
+                  vehicleTitle={vehicleTitle}
+                  vin={displayVehicle.vin}
+                />
+              ) : null}
+            </div>
             <button className="modal-close-button" type="button" onClick={onClose}>
               Close
             </button>
