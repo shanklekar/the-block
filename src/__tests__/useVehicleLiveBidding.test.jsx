@@ -13,6 +13,7 @@ class MockWebSocket {
     this.url = url;
     this.readyState = 0;
     this.listeners = new Map();
+    this.send = vi.fn();
     this.close = vi.fn(() => {
       this.readyState = 3;
     });
@@ -230,6 +231,55 @@ describe("useVehicleLiveBidding", () => {
     expect(result.current.canBid).toBe(false);
   });
 
+  it("sends heartbeat pings while the websocket is open", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        auction_started: true,
+        bid_count: 1,
+        current_bid: 10000,
+        is_high_bidder: false,
+        is_sold: false,
+        minimum_next_bid: 10100,
+        starting_bid: 9500,
+        vehicle_id: 42,
+      }),
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHook(() =>
+      useVehicleLiveBidding({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        fetchInitialState: true,
+        userId: 9,
+        vehicle: baseVehicle,
+      }),
+    );
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    const socket = MockWebSocket.instances[0];
+
+    act(() => {
+      socket.emit("open");
+      vi.advanceTimersByTime(20_000);
+      vi.advanceTimersByTime(20_000);
+    });
+
+    expect(socket.send).toHaveBeenCalledTimes(2);
+    expect(socket.send).toHaveBeenNthCalledWith(1, "ping");
+    expect(socket.send).toHaveBeenNthCalledWith(2, "ping");
+
+    vi.useRealTimers();
+  });
+
   it("cancels a pending websocket connect during cleanup before a socket is created", async () => {
     vi.useFakeTimers();
 
@@ -354,5 +404,58 @@ describe("useVehicleLiveBidding", () => {
     });
 
     expect(socket.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops heartbeat pings after cleanup closes the websocket", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        auction_started: true,
+        bid_count: 1,
+        current_bid: 10000,
+        is_high_bidder: false,
+        is_sold: false,
+        minimum_next_bid: 10100,
+        starting_bid: 9500,
+        vehicle_id: 42,
+      }),
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { unmount } = renderHook(() =>
+      useVehicleLiveBidding({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        fetchInitialState: true,
+        userId: 9,
+        vehicle: baseVehicle,
+      }),
+    );
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    const socket = MockWebSocket.instances[0];
+
+    act(() => {
+      socket.emit("open");
+      vi.advanceTimersByTime(20_000);
+    });
+
+    expect(socket.send).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+
+    expect(socket.close).toHaveBeenCalledTimes(1);
+    expect(socket.send).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
   });
 });

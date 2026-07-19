@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_BID_INCREMENT = 100;
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const HEARTBEAT_MESSAGE = "ping";
 
 function parseAmount(value) {
   if (value === null || value === undefined || value === "") {
@@ -93,6 +95,13 @@ export function useVehicleLiveBidding({
   const websocketRef = useRef(null);
   const websocketLifecycleRef = useRef(null);
 
+  function clearHeartbeatInterval(lifecycleState) {
+    if (lifecycleState?.heartbeatIntervalId) {
+      window.clearInterval(lifecycleState.heartbeatIntervalId);
+      lifecycleState.heartbeatIntervalId = null;
+    }
+  }
+
   function closeCurrentWebSocket() {
     const currentWebsocket = websocketRef.current;
     const lifecycleState = websocketLifecycleRef.current;
@@ -104,6 +113,7 @@ export function useVehicleLiveBidding({
     }
 
     lifecycleState.intentionalClose = true;
+    clearHeartbeatInterval(lifecycleState);
     websocketRef.current = null;
     websocketLifecycleRef.current = null;
     currentWebsocket.close();
@@ -178,6 +188,7 @@ export function useVehicleLiveBidding({
         `${toWebSocketUrl(apiBaseUrl)}/ws/vehicles/${vehicle.id}/bidding?user_id=${userId}`,
       );
       lifecycleState = {
+        heartbeatIntervalId: null,
         hadError: false,
         intentionalClose: false,
         opened: false,
@@ -199,6 +210,18 @@ export function useVehicleLiveBidding({
 
         lifecycleState.opened = true;
         lifecycleState.hadError = false;
+        clearHeartbeatInterval(lifecycleState);
+        lifecycleState.heartbeatIntervalId = window.setInterval(() => {
+          if (!isCurrentConnection() || lifecycleState.intentionalClose) {
+            return;
+          }
+
+          try {
+            websocket.send(HEARTBEAT_MESSAGE);
+          } catch {
+            // Let the close/error handlers surface connection problems.
+          }
+        }, HEARTBEAT_INTERVAL_MS);
         setStateErrorMessage("");
       });
 
@@ -228,6 +251,7 @@ export function useVehicleLiveBidding({
           return;
         }
 
+        clearHeartbeatInterval(lifecycleState);
         websocketRef.current = null;
         websocketLifecycleRef.current = null;
 
@@ -250,6 +274,7 @@ export function useVehicleLiveBidding({
       }
 
       lifecycleState.intentionalClose = true;
+      clearHeartbeatInterval(lifecycleState);
 
       if (
         websocketRef.current === websocket &&

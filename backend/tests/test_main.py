@@ -66,6 +66,7 @@ class MainHelperTests(BackendDatabaseTestCase):
         class FakeWebSocket:
             def __init__(self, should_fail: bool = False) -> None:
                 self.accepted = False
+                self.closed = False
                 self.messages: list[dict[str, object]] = []
                 self.should_fail = should_fail
 
@@ -76,6 +77,9 @@ class MainHelperTests(BackendDatabaseTestCase):
                 if self.should_fail:
                     raise RuntimeError("socket closed")
                 self.messages.append(payload)
+
+            async def close(self, code: int | None = None, reason: str | None = None) -> None:
+                self.closed = True
 
         manager = main.VehicleBiddingConnectionManager()
         first = FakeWebSocket()
@@ -88,6 +92,46 @@ class MainHelperTests(BackendDatabaseTestCase):
         self.assertEqual(first.messages[0]["vehicle_id"], "veh-started")
         self.assertFalse(first.messages[0]["is_high_bidder"])
         self.assertNotIn(second, manager._connections["veh-started"])
+
+    def test_vehicle_bidding_connection_manager_enforces_connection_caps(self) -> None:
+        class FakeWebSocket:
+            def __init__(self) -> None:
+                self.accepted = False
+
+            async def accept(self) -> None:
+                self.accepted = True
+
+        manager = main.VehicleBiddingConnectionManager(
+            max_total_connections=10,
+            max_connections_per_vehicle=2,
+            max_connections_per_user_per_vehicle=2,
+        )
+        sockets = [FakeWebSocket() for _ in range(5)]
+
+        asyncio.run(manager.connect("veh-started", 1, sockets[0]))
+        asyncio.run(manager.connect("veh-started", 1, sockets[1]))
+
+        with self.assertRaises(main.BiddingWebSocketLimitExceeded):
+            asyncio.run(manager.connect("veh-started", 1, sockets[2]))
+
+        asyncio.run(manager.disconnect("veh-started", sockets[1]))
+        asyncio.run(manager.connect("veh-other", 2, sockets[2]))
+        asyncio.run(manager.connect("veh-started", 3, sockets[3]))
+
+        self.assertEqual(manager.total_active_connections(), 3)
+        self.assertEqual(manager.vehicle_connection_count("veh-started"), 2)
+        self.assertEqual(manager.user_connection_count("veh-started", 1), 1)
+
+        total_cap_manager = main.VehicleBiddingConnectionManager(
+            max_total_connections=2,
+            max_connections_per_vehicle=5,
+            max_connections_per_user_per_vehicle=5,
+        )
+        asyncio.run(total_cap_manager.connect("veh-a", 1, sockets[0]))
+        asyncio.run(total_cap_manager.connect("veh-b", 2, sockets[1]))
+
+        with self.assertRaises(main.BiddingWebSocketLimitExceeded):
+            asyncio.run(total_cap_manager.connect("veh-c", 3, sockets[4]))
 
 
 class ApiEndpointTests(BackendApiTestCase):
@@ -379,6 +423,54 @@ class ApiEndpointTests(BackendApiTestCase):
         with self.assertRaises(WebSocketDisconnect):
             with self.client.websocket_connect("/ws/vehicles/veh-future/bidding?user_id=1") as websocket:
                 websocket.receive_json()
+
+    def test_vehicle_bidding_websocket_rejects_unsupported_payloads(self) -> None:
+        with self.assertRaises(WebSocketDisconnect) as invalid_text:
+            with self.client.websocket_connect("/ws/vehicles/veh-started/bidding?user_id=2") as websocket:
+                websocket.receive_json()
+                websocket.send_text("hello")
+                websocket.receive_text()
+
+        self.assertEqual(invalid_text.exception.code, 1008)
+        self.assertEqual(invalid_text.exception.reason, "Unsupported websocket payload")
+
+        with self.assertRaises(WebSocketDisconnect) as invalid_bytes:
+            with self.client.websocket_connect("/ws/vehicles/veh-started/bidding?user_id=2") as websocket:
+                websocket.receive_json()
+                websocket.send_bytes(b"ping")
+                websocket.receive_text()
+
+        self.assertEqual(invalid_bytes.exception.code, 1008)
+        self.assertEqual(invalid_bytes.exception.reason, "Unsupported websocket payload")
+
+    def test_vehicle_bidding_websocket_closes_idle_connections(self) -> None:
+        async def timeout_receive(awaitable: object, timeout: int) -> object:
+            if asyncio.iscoroutine(awaitable):
+                awaitable.close()
+            raise TimeoutError
+
+        with patch(
+            "backend.app.main.asyncio.wait_for",
+            side_effect=timeout_receive,
+        ):
+            with self.assertRaises(WebSocketDisconnect) as disconnected:
+                with self.client.websocket_connect("/ws/vehicles/veh-started/bidding?user_id=2") as websocket:
+                    websocket.receive_json()
+                    websocket.receive_text()
+
+        self.assertEqual(disconnected.exception.code, 1008)
+        self.assertEqual(disconnected.exception.reason, "Idle timeout")
+
+    def test_vehicle_bidding_websocket_rate_limits_heartbeat_spam(self) -> None:
+        with self.assertRaises(WebSocketDisconnect) as disconnected:
+            with self.client.websocket_connect("/ws/vehicles/veh-started/bidding?user_id=2") as websocket:
+                websocket.receive_json()
+                for _ in range(main.MAX_BIDDING_SOCKET_MESSAGES_PER_WINDOW + 1):
+                    websocket.send_text(main.BIDDING_SOCKET_HEARTBEAT_MESSAGE)
+                websocket.receive_text()
+
+        self.assertEqual(disconnected.exception.code, 1008)
+        self.assertEqual(disconnected.exception.reason, "Rate limit exceeded")
 
     def test_mutate_purchased_creates_purchase_marks_watch_and_broadcasts(self) -> None:
         with patch("backend.app.main._broadcast_bidding_state", new=AsyncMock()) as broadcast:

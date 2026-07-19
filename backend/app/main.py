@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
+import time
+from collections import deque
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -74,27 +77,74 @@ logger = logging.getLogger("the_block.api")
 
 BID_INCREMENT = 100.0
 HIDDEN_USER_ID = 0
+MAX_BIDDING_CONNECTIONS = 500
+MAX_CONNECTIONS_PER_VEHICLE = 50
+MAX_CONNECTIONS_PER_USER_PER_VEHICLE = 2
+BIDDING_SOCKET_IDLE_TIMEOUT_SECONDS = 60
+BIDDING_SOCKET_RATE_LIMIT_WINDOW_SECONDS = 60
+MAX_BIDDING_SOCKET_MESSAGES_PER_WINDOW = 12
+BIDDING_SOCKET_HEARTBEAT_MESSAGE = "ping"
+
+
+class BiddingWebSocketLimitExceeded(Exception):
+    pass
 
 
 class VehicleBiddingConnectionManager:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        max_total_connections: int = MAX_BIDDING_CONNECTIONS,
+        max_connections_per_vehicle: int = MAX_CONNECTIONS_PER_VEHICLE,
+        max_connections_per_user_per_vehicle: int = MAX_CONNECTIONS_PER_USER_PER_VEHICLE,
+    ) -> None:
         self._connections: dict[str, dict[WebSocket, int]] = {}
+        self._lock = asyncio.Lock()
+        self._max_total_connections = max_total_connections
+        self._max_connections_per_vehicle = max_connections_per_vehicle
+        self._max_connections_per_user_per_vehicle = max_connections_per_user_per_vehicle
+
+    def total_active_connections(self) -> int:
+        return sum(len(subscribers) for subscribers in self._connections.values())
+
+    def vehicle_connection_count(self, vehicle_id: str) -> int:
+        return len(self._connections.get(vehicle_id, {}))
+
+    def user_connection_count(self, vehicle_id: str, user_id: int) -> int:
+        return sum(
+            1
+            for subscriber_user_id in self._connections.get(vehicle_id, {}).values()
+            if subscriber_user_id == user_id
+        )
 
     async def connect(self, vehicle_id: str, user_id: int, websocket: WebSocket) -> None:
-        await websocket.accept()
-        self._connections.setdefault(vehicle_id, {})[websocket] = user_id
+        async with self._lock:
+            if self.total_active_connections() >= self._max_total_connections:
+                raise BiddingWebSocketLimitExceeded
+            if self.vehicle_connection_count(vehicle_id) >= self._max_connections_per_vehicle:
+                raise BiddingWebSocketLimitExceeded
+            if (
+                self.user_connection_count(vehicle_id, user_id)
+                >= self._max_connections_per_user_per_vehicle
+            ):
+                raise BiddingWebSocketLimitExceeded
 
-    def disconnect(self, vehicle_id: str, websocket: WebSocket) -> None:
-        subscribers = self._connections.get(vehicle_id)
-        if not subscribers:
-            return
+            await websocket.accept()
+            self._connections.setdefault(vehicle_id, {})[websocket] = user_id
 
-        subscribers.pop(websocket, None)
-        if not subscribers:
-            self._connections.pop(vehicle_id, None)
+    async def disconnect(self, vehicle_id: str, websocket: WebSocket) -> None:
+        async with self._lock:
+            subscribers = self._connections.get(vehicle_id)
+            if not subscribers:
+                return
+
+            subscribers.pop(websocket, None)
+            if not subscribers:
+                self._connections.pop(vehicle_id, None)
 
     async def broadcast(self, vehicle_id: str) -> None:
-        subscribers = list(self._connections.get(vehicle_id, {}).items())
+        async with self._lock:
+            subscribers = list(self._connections.get(vehicle_id, {}).items())
         if not subscribers:
             return
 
@@ -118,7 +168,7 @@ class VehicleBiddingConnectionManager:
                 disconnected.append(websocket)
 
         for websocket in disconnected:
-            self.disconnect(vehicle_id, websocket)
+            await self.disconnect(vehicle_id, websocket)
 
 
 bidding_connection_manager = VehicleBiddingConnectionManager()
@@ -735,6 +785,23 @@ def _load_bidding_state(
 
 async def _broadcast_bidding_state(vehicle_id: str) -> None:
     await bidding_connection_manager.broadcast(vehicle_id)
+
+
+async def _close_bidding_socket(
+    vehicle_id: str,
+    websocket: WebSocket,
+    *,
+    reason: str,
+    tracked: bool = True,
+) -> None:
+    try:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason=reason,
+        )
+    finally:
+        if tracked:
+            await bidding_connection_manager.disconnect(vehicle_id, websocket)
 
 
 def _build_is_watched_select(user_id: int | None) -> tuple[str, list[Any]]:
@@ -1483,16 +1550,79 @@ async def vehicle_bidding_stream(
             )
             return
 
-    await bidding_connection_manager.connect(vehicle_id, user_id, websocket)
+    try:
+        await bidding_connection_manager.connect(vehicle_id, user_id, websocket)
+    except BiddingWebSocketLimitExceeded:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Connection limit exceeded",
+        )
+        return
 
     try:
         await websocket.send_json(snapshot.model_dump())
+        message_timestamps: deque[float] = deque()
         while True:
-            await websocket.receive_text()
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive(),
+                    timeout=BIDDING_SOCKET_IDLE_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                await _close_bidding_socket(
+                    vehicle_id,
+                    websocket,
+                    reason="Idle timeout",
+                )
+                return
+
+            if message["type"] == "websocket.disconnect":
+                return
+
+            if message["type"] != "websocket.receive":
+                await _close_bidding_socket(
+                    vehicle_id,
+                    websocket,
+                    reason="Unsupported websocket payload",
+                )
+                return
+
+            if message.get("bytes") is not None:
+                await _close_bidding_socket(
+                    vehicle_id,
+                    websocket,
+                    reason="Unsupported websocket payload",
+                )
+                return
+
+            if message.get("text") != BIDDING_SOCKET_HEARTBEAT_MESSAGE:
+                await _close_bidding_socket(
+                    vehicle_id,
+                    websocket,
+                    reason="Unsupported websocket payload",
+                )
+                return
+
+            now = time.monotonic()
+            while (
+                message_timestamps
+                and now - message_timestamps[0] >= BIDDING_SOCKET_RATE_LIMIT_WINDOW_SECONDS
+            ):
+                message_timestamps.popleft()
+
+            if len(message_timestamps) >= MAX_BIDDING_SOCKET_MESSAGES_PER_WINDOW:
+                await _close_bidding_socket(
+                    vehicle_id,
+                    websocket,
+                    reason="Rate limit exceeded",
+                )
+                return
+
+            message_timestamps.append(now)
     except WebSocketDisconnect:
         pass
     finally:
-        bidding_connection_manager.disconnect(vehicle_id, websocket)
+        await bidding_connection_manager.disconnect(vehicle_id, websocket)
 
 
 @app.post(
