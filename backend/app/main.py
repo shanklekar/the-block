@@ -1222,6 +1222,11 @@ async def place_bid(
                 """,
                 [payload.amount, next_bid_count, vehicle_id],
             )
+            _ensure_vehicle_is_watched(
+                connection,
+                user_id=user_id,
+                vehicle_id=vehicle_id,
+            )
             connection.commit()
         except HTTPException:
             connection.rollback()

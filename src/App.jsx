@@ -468,14 +468,20 @@ export default function App() {
     setPurchaseFeedbackTone("info");
     setPurchaseFeedbackMessage(successMessage);
 
+    handleWatchStateChanged({
+      isWatched: true,
+      vehicleId: payload.vehicle_id,
+    });
+
     if (selectedVehicle?.id === payload.vehicle_id) {
-      setVehicleDetailsPurchaseMessage(successMessage);
       setSelectedVehicle((currentVehicle) =>
         currentVehicle
           ? {
               ...currentVehicle,
               bid_count: payload.bid_count,
               current_bid: payload.current_bid,
+              is_high_bidder: true,
+              is_watched: true,
             }
           : currentVehicle,
       );

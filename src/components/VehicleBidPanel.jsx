@@ -152,7 +152,7 @@ export default function VehicleBidPanel({
   let feedbackMessage = "";
   let feedbackMessageClassName = "";
 
-  if (successMessage) {
+  if (successMessage && variant !== "detail") {
     feedbackMessage = successMessage;
     feedbackMessageClassName = "inventory-inline-message";
   }
@@ -161,7 +161,7 @@ export default function VehicleBidPanel({
   if (isSubmitting) {
     submitButtonLabel = "Submitting bid...";
   } else if (isHighBidder) {
-    submitButtonLabel = "You are current high bidder!";
+    submitButtonLabel = "You are the highest bidder";
   }
 
   return (
