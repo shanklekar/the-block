@@ -230,6 +230,45 @@ describe("useVehicleLiveBidding", () => {
     expect(result.current.canBid).toBe(false);
   });
 
+  it("cancels a pending websocket connect during cleanup before a socket is created", async () => {
+    vi.useFakeTimers();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        auction_started: true,
+        bid_count: 1,
+        current_bid: 10000,
+        is_high_bidder: false,
+        is_sold: false,
+        minimum_next_bid: 10100,
+        starting_bid: 9500,
+        vehicle_id: 42,
+      }),
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { unmount } = renderHook(() =>
+      useVehicleLiveBidding({
+        apiBaseUrl: "http://127.0.0.1:8000",
+        fetchInitialState: true,
+        userId: 9,
+        vehicle: baseVehicle,
+      }),
+    );
+
+    unmount();
+
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(0);
+
+    vi.useRealTimers();
+  });
+
   it("surfaces a live feed error when the websocket closes unexpectedly", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

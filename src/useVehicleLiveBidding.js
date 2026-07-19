@@ -166,80 +166,95 @@ export function useVehicleLiveBidding({
       return undefined;
     }
 
-    const websocket = new WebSocket(
-      `${toWebSocketUrl(apiBaseUrl)}/ws/vehicles/${vehicle.id}/bidding?user_id=${userId}`,
-    );
-    const lifecycleState = {
-      hadError: false,
-      intentionalClose: false,
-      opened: false,
-    };
-    websocketRef.current = websocket;
-    websocketLifecycleRef.current = lifecycleState;
+    let websocket = null;
+    let lifecycleState = null;
+    let cancelled = false;
+    const connectTimeoutId = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
 
-    function isCurrentConnection() {
-      return (
-        websocketRef.current === websocket &&
-        websocketLifecycleRef.current === lifecycleState
+      websocket = new WebSocket(
+        `${toWebSocketUrl(apiBaseUrl)}/ws/vehicles/${vehicle.id}/bidding?user_id=${userId}`,
       );
-    }
+      lifecycleState = {
+        hadError: false,
+        intentionalClose: false,
+        opened: false,
+      };
+      websocketRef.current = websocket;
+      websocketLifecycleRef.current = lifecycleState;
 
-    websocket.addEventListener("open", () => {
-      if (!isCurrentConnection()) {
-        return;
+      function isCurrentConnection() {
+        return (
+          websocketRef.current === websocket &&
+          websocketLifecycleRef.current === lifecycleState
+        );
       }
 
-      lifecycleState.opened = true;
-      lifecycleState.hadError = false;
-      setStateErrorMessage("");
-    });
+      websocket.addEventListener("open", () => {
+        if (!isCurrentConnection()) {
+          return;
+        }
 
-    websocket.addEventListener("message", (event) => {
-      if (!isCurrentConnection()) {
-        return;
-      }
+        lifecycleState.opened = true;
+        lifecycleState.hadError = false;
+        setStateErrorMessage("");
+      });
 
-      try {
-        const payload = JSON.parse(event.data);
-        setBiddingState(payload);
-      } catch {
-        // Ignore malformed socket payloads in the demo.
-      }
-    });
+      websocket.addEventListener("message", (event) => {
+        if (!isCurrentConnection()) {
+          return;
+        }
 
-    websocket.addEventListener("error", () => {
-      if (!isCurrentConnection() || lifecycleState.intentionalClose) {
-        return;
-      }
+        try {
+          const payload = JSON.parse(event.data);
+          setBiddingState(payload);
+        } catch {
+          // Ignore malformed socket payloads in the demo.
+        }
+      });
 
-      lifecycleState.hadError = true;
-    });
+      websocket.addEventListener("error", () => {
+        if (!isCurrentConnection() || lifecycleState.intentionalClose) {
+          return;
+        }
 
-    websocket.addEventListener("close", () => {
-      if (!isCurrentConnection()) {
-        return;
-      }
+        lifecycleState.hadError = true;
+      });
 
-      websocketRef.current = null;
-      websocketLifecycleRef.current = null;
+      websocket.addEventListener("close", () => {
+        if (!isCurrentConnection()) {
+          return;
+        }
 
-      if (lifecycleState.intentionalClose) {
-        return;
-      }
-
-      if (enabled && biddingState?.auction_started && !biddingState?.is_sold) {
-        setStateErrorMessage("We couldn't keep the live bid feed connected.");
-      }
-
-      if (websocketRef.current === websocket) {
         websocketRef.current = null;
-      }
-    });
+        websocketLifecycleRef.current = null;
+
+        if (lifecycleState.intentionalClose) {
+          return;
+        }
+
+        if (enabled && biddingState?.auction_started && !biddingState?.is_sold) {
+          setStateErrorMessage("We couldn't keep the live bid feed connected.");
+        }
+      });
+    }, 0);
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(connectTimeoutId);
+
+      if (!websocket || !lifecycleState) {
+        return;
+      }
+
       lifecycleState.intentionalClose = true;
 
-      if (isCurrentConnection()) {
+      if (
+        websocketRef.current === websocket &&
+        websocketLifecycleRef.current === lifecycleState
+      ) {
         websocketRef.current = null;
         websocketLifecycleRef.current = null;
       }
