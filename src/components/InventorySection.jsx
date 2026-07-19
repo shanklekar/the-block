@@ -467,6 +467,7 @@ export default function InventorySection({
         if (
           vehicle.bid_count === nextVehicleState.bid_count &&
           vehicle.current_bid === nextVehicleState.current_bid &&
+          vehicle.is_high_bidder === nextVehicleState.is_high_bidder &&
           vehicle.is_purchased === nextVehicleState.is_purchased &&
           vehicle.starting_bid === nextVehicleState.starting_bid
         ) {

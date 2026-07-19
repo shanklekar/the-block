@@ -112,15 +112,7 @@ export function useVehicleLiveBidding({
   useEffect(() => {
     setBiddingState(buildInitialBiddingState(vehicle));
     setStateErrorMessage("");
-  }, [
-    vehicle?.auction_start,
-    vehicle?.bid_count,
-    vehicle?.current_bid,
-    vehicle?.id,
-    vehicle?.is_high_bidder,
-    vehicle?.is_purchased,
-    vehicle?.starting_bid,
-  ]);
+  }, [vehicle?.id]);
 
   useEffect(() => {
     if (!enabled || !fetchInitialState || !vehicle?.id || userId === null || userId === undefined) {

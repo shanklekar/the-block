@@ -139,6 +139,7 @@ export default function VehicleCard({
     const nextVehicleState = {
       bid_count: displayVehicle.bid_count,
       current_bid: displayVehicle.current_bid,
+      is_high_bidder: Boolean(displayVehicle.is_high_bidder),
       is_purchased: Boolean(displayVehicle.is_purchased),
       starting_bid: displayVehicle.starting_bid,
     };
@@ -148,6 +149,7 @@ export default function VehicleCard({
       previousVehicleState &&
       previousVehicleState.bid_count === nextVehicleState.bid_count &&
       previousVehicleState.current_bid === nextVehicleState.current_bid &&
+      previousVehicleState.is_high_bidder === nextVehicleState.is_high_bidder &&
       previousVehicleState.is_purchased === nextVehicleState.is_purchased &&
       previousVehicleState.starting_bid === nextVehicleState.starting_bid
     ) {
@@ -160,6 +162,7 @@ export default function VehicleCard({
     displayVehicle?.bid_count,
     displayVehicle?.current_bid,
     displayVehicle?.id,
+    displayVehicle?.is_high_bidder,
     displayVehicle?.is_purchased,
     displayVehicle?.starting_bid,
     onVehicleLiveStateChange,

@@ -28,6 +28,7 @@ export default function VehicleBidPanel({
 }) {
   const lowBidErrorTimeoutRef = useRef(null);
   const successMessageTimeoutRef = useRef(null);
+  const followsSuggestedBidRef = useRef(true);
   const [bidAmount, setBidAmount] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [hasBidInputError, setHasBidInputError] = useState(false);
@@ -40,11 +41,10 @@ export default function VehicleBidPanel({
   const auctionStarted = Boolean(biddingState?.auction_started);
   const isSold = Boolean(biddingState?.is_sold || displayVehicle?.is_purchased);
   const isPurchasedByUser = Boolean(isPurchased || displayVehicle?.is_purchased_by_user);
-  const isHighBidder = Boolean(
-    isOptimisticallyHighBidder ||
-      biddingState?.is_high_bidder ||
-      displayVehicle?.is_high_bidder,
-  );
+  const hasAuthoritativeHighBidderState = typeof biddingState?.is_high_bidder === "boolean";
+  const isHighBidder = hasAuthoritativeHighBidderState
+    ? biddingState.is_high_bidder
+    : Boolean(isOptimisticallyHighBidder || displayVehicle?.is_high_bidder);
   const canToggleBidding = auctionStarted && !isSold && !isPurchasedByUser;
   const canSubmit = auctionStarted && !isSold && !isPurchasedByUser && !isHighBidder;
   const isGuardedSubmitState = canSubmit && !isSubmitting && !isBiddingEnabled;
@@ -56,6 +56,7 @@ export default function VehicleBidPanel({
   const auctionStartTime = displayVehicle?.auction_start
     ? formatAuctionDate(displayVehicle.auction_start)
     : "Auction in progress";
+  const suggestedBidAmount = minimumNextBid ? String(Math.round(minimumNextBid)) : "";
   const panelClassName = [
     "vehicle-bid-panel",
     variant === "detail" ? "vehicle-bid-panel-detail" : "vehicle-bid-panel-card",
@@ -99,7 +100,8 @@ export default function VehicleBidPanel({
   useEffect(() => {
     clearLowBidErrorTimeout();
     clearSuccessMessageTimeout();
-    setBidAmount(minimumNextBid ? String(Math.round(minimumNextBid)) : "");
+    followsSuggestedBidRef.current = true;
+    setBidAmount(suggestedBidAmount);
     setErrorMessage("");
     setHasBidInputError(false);
     setIsBiddingEnabled(false);
@@ -107,6 +109,21 @@ export default function VehicleBidPanel({
     setIsOptimisticallyHighBidder(false);
     setSuccessMessage("");
   }, [displayVehicle?.id]);
+
+  useEffect(() => {
+    setBidAmount((currentBidAmount) => {
+      if (currentBidAmount === "") {
+        followsSuggestedBidRef.current = true;
+        return suggestedBidAmount;
+      }
+
+      if (followsSuggestedBidRef.current) {
+        return suggestedBidAmount;
+      }
+
+      return currentBidAmount;
+    });
+  }, [suggestedBidAmount]);
 
   useEffect(() => {
     if (!biddingState?.is_high_bidder && !displayVehicle?.is_high_bidder) {
@@ -204,6 +221,7 @@ export default function VehicleBidPanel({
 
       setSuccessMessage(`Bid placed at ${formatCurrency(payload.current_bid)}.`);
       setIsOptimisticallyHighBidder(true);
+      followsSuggestedBidRef.current = true;
       setBidAmount(String(Math.round(payload.current_bid + DEFAULT_BID_INCREMENT)));
       onBidPlaced?.(payload);
     } catch (error) {
@@ -290,7 +308,9 @@ export default function VehicleBidPanel({
               type="button"
               disabled={!canSubmit || isSubmitting}
               onClick={() => {
-                setBidAmount(String((displayBid ?? 0) + increment));
+                const nextBidAmount = String((displayBid ?? 0) + increment);
+                followsSuggestedBidRef.current = nextBidAmount === suggestedBidAmount;
+                setBidAmount(nextBidAmount);
                 setHasBidInputError(false);
                 setErrorMessage("");
                 setSuccessMessage("");
@@ -311,7 +331,10 @@ export default function VehicleBidPanel({
             value={bidAmount}
             disabled={!canSubmit || isSubmitting}
             onChange={(event) => {
-              setBidAmount(event.target.value);
+              const nextBidAmount = event.target.value;
+              followsSuggestedBidRef.current =
+                nextBidAmount === "" || nextBidAmount === suggestedBidAmount;
+              setBidAmount(nextBidAmount);
               setHasBidInputError(false);
               setErrorMessage("");
               setSuccessMessage("");
