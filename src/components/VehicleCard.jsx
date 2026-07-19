@@ -69,6 +69,7 @@ function CopiedIcon() {
 
 export default function VehicleCard({
   apiBaseUrl = "",
+  cardSurface = "live-search",
   currentUserId = null,
   isBiddingEnabled = false,
   isPurchased = false,
@@ -126,7 +127,12 @@ export default function VehicleCard({
   const titleStatusClassName = getTitleStatusBadgeClassName(displayVehicle.title_status);
   const hasVin = Boolean(displayVehicle.vin);
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
-  const auctionCountdown = formatAuctionCountdown(displayVehicle.auction_start, countdownNow);
+  const isAuctionInProgress = Boolean(showInlineBidding && biddingState?.auction_started);
+  const shouldShowAuctionStartRow =
+    cardSurface === "live-search" || (cardSurface === "watchlist" && !isAuctionInProgress);
+  const auctionCountdown = cardSurface === "live-search" && isAuctionInProgress
+    ? "In Progress"
+    : formatAuctionCountdown(displayVehicle.auction_start, countdownNow);
 
   useEffect(() => {
     return () => {
@@ -294,7 +300,7 @@ export default function VehicleCard({
           ) : null}
         </div>
 
-        {!showBidPanel ? (
+        {shouldShowAuctionStartRow ? (
           <dl className="vehicle-card-specs">
             <div className="vehicle-card-spec-row">
               <dt>Auction start</dt>

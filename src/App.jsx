@@ -895,6 +895,7 @@ export default function App() {
               apiBaseUrl={API_BASE_URL}
               biddingEnabledVehicleIds={biddingEnabledVehicleIds}
               bootstrapErrorMessage={bootstrapErrorMessage}
+              cardSurface="watchlist"
               collapseLabel="Watchlist"
               currentUserId={currentUserId}
               emptyStateMessage="No watched vehicles match your criteria."
@@ -936,6 +937,7 @@ export default function App() {
               apiBaseUrl={API_BASE_URL}
               biddingEnabledVehicleIds={biddingEnabledVehicleIds}
               bootstrapErrorMessage={bootstrapErrorMessage}
+              cardSurface="live-search"
               currentUserId={currentUserId}
               emptyStateMessage="No vehicles match your criteria."
               enableWatchToggle

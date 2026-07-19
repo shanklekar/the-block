@@ -85,6 +85,7 @@ export default function InventorySection({
   apiBaseUrl = "",
   biddingEnabledVehicleIds = {},
   bootstrapErrorMessage,
+  cardSurface = "live-search",
   collapseLabel = "Section",
   currentUserId = null,
   enableWatchToggle = false,
@@ -563,6 +564,7 @@ export default function InventorySection({
       apiBaseUrl={apiBaseUrl}
       activeFilterCount={activeFilterCount}
       biddingEnabledVehicleIds={biddingEnabledVehicleIds}
+      cardSurface={cardSurface}
       currentUserId={currentUserId}
       emptyStateMessage={emptyStateMessage}
       errorMessage={displayErrorMessage}

@@ -23,6 +23,7 @@ export default function InventoryResults({
   apiBaseUrl = "",
   activeFilterCount,
   biddingEnabledVehicleIds = {},
+  cardSurface = "live-search",
   collapseLabel = "Section",
   currentUserId = null,
   emptyStateMessage = "No vehicles match your criteria.",
@@ -135,6 +136,7 @@ export default function InventoryResults({
               {vehicles.map((vehicle) => (
                 <VehicleCard
                   apiBaseUrl={apiBaseUrl}
+                  cardSurface={cardSurface}
                   currentUserId={currentUserId}
                   isBiddingEnabled={Boolean(biddingEnabledVehicleIds[vehicle.id])}
                   isPurchased={Boolean(
