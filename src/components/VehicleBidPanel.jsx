@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatAuctionDate, formatCurrency } from "../inventoryConfig";
 
 const QUICK_BID_INCREMENTS = [100, 250, 500];
 const DEFAULT_BID_INCREMENT = 100;
+const LOW_BID_ERROR_MESSAGE = "Bid is too low";
+const LOW_BID_ERROR_TIMEOUT_MS = 2400;
 
 function parseBidAmount(value) {
   if (value === "") {
@@ -23,8 +25,10 @@ export default function VehicleBidPanel({
   userId,
   variant = "card",
 }) {
+  const lowBidErrorTimeoutRef = useRef(null);
   const [bidAmount, setBidAmount] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [hasBidInputError, setHasBidInputError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOptimisticallyHighBidder, setIsOptimisticallyHighBidder] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -40,7 +44,6 @@ export default function VehicleBidPanel({
   );
   const canSubmit = auctionStarted && !isSold && !isPurchasedByUser && !isHighBidder;
   const parsedBidAmount = parseBidAmount(bidAmount);
-  const isBidTooLow = parsedBidAmount !== null && parsedBidAmount < minimumNextBid;
   const bidButtonAmount = parsedBidAmount ?? minimumNextBid;
   const displayBid = displayVehicle?.current_bid ?? displayVehicle?.starting_bid ?? null;
   const bidCount = Number.isFinite(displayVehicle?.bid_count) ? displayVehicle.bid_count : 0;
@@ -60,10 +63,25 @@ export default function VehicleBidPanel({
   ]
     .filter(Boolean)
     .join(" ");
+  const bidInputClassName = [
+    "vehicle-bid-panel-input",
+    hasBidInputError ? "has-error" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  function clearLowBidErrorTimeout() {
+    if (lowBidErrorTimeoutRef.current) {
+      window.clearTimeout(lowBidErrorTimeoutRef.current);
+      lowBidErrorTimeoutRef.current = null;
+    }
+  }
 
   useEffect(() => {
-    setBidAmount("");
+    clearLowBidErrorTimeout();
+    setBidAmount(minimumNextBid ? String(Math.round(minimumNextBid)) : "");
     setErrorMessage("");
+    setHasBidInputError(false);
     setIsSubmitting(false);
     setIsOptimisticallyHighBidder(false);
     setSuccessMessage("");
@@ -88,30 +106,44 @@ export default function VehicleBidPanel({
   }, [errorMessage]);
 
   useEffect(() => {
-    if (!minimumNextBid) {
-      return;
+    if (errorMessage !== LOW_BID_ERROR_MESSAGE) {
+      return undefined;
     }
 
-    const nextBidAmount = parseBidAmount(bidAmount);
-    if (nextBidAmount === null || nextBidAmount < minimumNextBid) {
-      setBidAmount(String(Math.round(minimumNextBid)));
-    }
-  }, [bidAmount, minimumNextBid]);
+    clearLowBidErrorTimeout();
+    lowBidErrorTimeoutRef.current = window.setTimeout(() => {
+      setErrorMessage("");
+      setHasBidInputError(false);
+      lowBidErrorTimeoutRef.current = null;
+    }, LOW_BID_ERROR_TIMEOUT_MS);
+
+    return () => {
+      clearLowBidErrorTimeout();
+    };
+  }, [errorMessage]);
+
+  useEffect(() => {
+    return () => {
+      clearLowBidErrorTimeout();
+    };
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (
-      !displayVehicle?.id ||
-      !canSubmit ||
-      parsedBidAmount === null ||
-      parsedBidAmount < minimumNextBid
-    ) {
+    if (!displayVehicle?.id || !canSubmit || parsedBidAmount === null) {
+      return;
+    }
+
+    if (parsedBidAmount < minimumNextBid) {
+      setErrorMessage(LOW_BID_ERROR_MESSAGE);
+      setHasBidInputError(true);
       return;
     }
 
     try {
       setIsSubmitting(true);
+      setHasBidInputError(false);
       setErrorMessage("");
       setSuccessMessage("");
 
@@ -139,6 +171,7 @@ export default function VehicleBidPanel({
       setBidAmount(String(Math.round(payload.current_bid + DEFAULT_BID_INCREMENT)));
       onBidPlaced?.(payload);
     } catch (error) {
+      setHasBidInputError(false);
       setErrorMessage(error.message || "We couldn't place that bid right now.");
     } finally {
       setIsSubmitting(false);
@@ -196,7 +229,7 @@ export default function VehicleBidPanel({
         </div>
       ) : null}
 
-      <form className="vehicle-bid-panel-form" onSubmit={handleSubmit}>
+      <form className="vehicle-bid-panel-form" noValidate onSubmit={handleSubmit}>
         <div className="vehicle-bid-panel-shortcuts">
           {QUICK_BID_INCREMENTS.map((increment) => (
             <button
@@ -206,6 +239,7 @@ export default function VehicleBidPanel({
               disabled={!canSubmit || isSubmitting}
               onClick={() => {
                 setBidAmount(String((displayBid ?? 0) + increment));
+                setHasBidInputError(false);
                 setErrorMessage("");
                 setSuccessMessage("");
               }}
@@ -218,34 +252,34 @@ export default function VehicleBidPanel({
         <label className="vehicle-bid-panel-input-group">
           <span>Your bid</span>
           <input
-            className="vehicle-bid-panel-input"
+            aria-invalid={hasBidInputError}
+            className={bidInputClassName}
             inputMode="numeric"
-            min={minimumNextBid}
-            step="100"
             type="number"
             value={bidAmount}
             disabled={!canSubmit || isSubmitting}
             onChange={(event) => {
               setBidAmount(event.target.value);
+              setHasBidInputError(false);
               setErrorMessage("");
               setSuccessMessage("");
             }}
           />
         </label>
 
-        {isBidTooLow ? (
-          <p className="vehicle-bid-panel-hint">
-            Enter at least {formatCurrency(minimumNextBid)}.
-          </p>
-        ) : (
-          <p className="vehicle-bid-panel-hint">
-            Bid in $100+ steps over the current high bid to stay in the running.
-          </p>
-        )}
+        <p className="vehicle-bid-panel-hint">
+          Bid in $100+ steps over the current high bid to stay in the running.
+        </p>
+
+        {errorMessage ? (
+          <div className="vehicle-bid-panel-inline-message error" role="status">
+            {errorMessage}
+          </div>
+        ) : null}
 
         <button
           className={submitButtonClassName}
-          disabled={!canSubmit || isSubmitting || parsedBidAmount === null || isBidTooLow}
+          disabled={!canSubmit || isSubmitting || parsedBidAmount === null}
           type="submit"
         >
           {submitButtonLabel}

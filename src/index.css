@@ -1286,6 +1286,17 @@ img {
   box-shadow: 0 0 0 4px rgba(165, 194, 255, 0.28);
 }
 
+.vehicle-bid-panel-input.has-error {
+  border-color: rgba(166, 35, 35, 0.45);
+  background: rgba(255, 245, 245, 0.96);
+  color: #8d2a2a;
+}
+
+.vehicle-bid-panel-input.has-error:focus-visible {
+  border-color: rgba(166, 35, 35, 0.55);
+  box-shadow: 0 0 0 4px rgba(240, 182, 182, 0.28);
+}
+
 .vehicle-bid-panel-input::-webkit-outer-spin-button,
 .vehicle-bid-panel-input::-webkit-inner-spin-button {
   margin: 0;
@@ -1302,6 +1313,23 @@ img {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+
+.vehicle-bid-panel-inline-message {
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(17, 42, 120, 0.08);
+  background: rgba(248, 250, 255, 0.92);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  animation: bid-panel-error-enter 180ms ease;
+}
+
+.vehicle-bid-panel-inline-message.error {
+  border-color: rgba(166, 35, 35, 0.14);
+  background: rgba(255, 241, 241, 0.92);
+  color: #8d2a2a;
 }
 
 .vehicle-card-skeleton {
@@ -1961,6 +1989,18 @@ img {
   from {
     opacity: 0;
     transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bid-panel-error-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
 
   to {
