@@ -253,7 +253,6 @@ The live smoke suite creates its own demo users, checks basic API health/search 
 
 What would you add, improve, or change?
 
-- I would add an auction ending process to illustrate how that would work
 - I would polish the UI more
     - Use Openlane's official style guide and colors
     - Improve the filters
@@ -261,6 +260,7 @@ What would you add, improve, or change?
     - Reduce white space or offer a "condensed" mode so users can see more info at a time
     - Add a dark mode to reduce eye strain at night or in heavy use
 - I would add authentication to demonstrate that
+- I would add an auction ending process to illustrate how that would work
 - I would have utilized docker and postgres
 - I would have made the live bid component utilize the server time instead of local system time for when its displayed.  The backend will not let a user bid before the auction starts but the front end could if its in a different time configuration.
 - I would have added a smart search for the live search and watchlist where the user can type a general description of what they are looking for and it would filter the search results based on that
@@ -273,3 +273,5 @@ What would you add, improve, or change?
 - Allow user to customize the grid size in search results (see more cars on screen at a time or see larger pictures and fonts)
 - I would add more unit tests, automated api tests, and automated gui tests (selenium/puppeteer)
 - I would generate scripts to stress test the bidding process and see what it can handle
+- I would have tested more
+- I would fix the 
