@@ -222,6 +222,8 @@ For UI work I like to see it, play with it, and iterate on it.  This means the c
 
 For this build I did manual testing as I worked through it, then wrote some key unit tests after everything was working to try and catch any bugs introduced with future changes.  This included a live api testing script to test competitive bidding scenarios.  I focused on the unit testing and api testing on the bidding process as this is the real core of the app and the main component that bugs can't be tolerated with.
 
+For code review, I asked the AI what is wrong with the code, do you see sql or code injection vulnerabilities, what inefficiencies or other issues do you see.  It found some good stuff that I fixed and some stuff that was not important for this demo.
+
 For manual testing, I clicked through the different UI components, trying them in every combination and on every view they are displayed.  I tested each filter to make sure it was filtering the results as expected, same with sorting.  I purchased vehicles with buy it now and made sure they went to purchases page with correct info.  I Loaded the ui in chrome and firefox to test different browsers and then bid against myself with both up side by side to make sure live bidding was working as expected.  I ran the front end with backend not running to make sure it handled no data like I expected.
 
 Automated backend tests:

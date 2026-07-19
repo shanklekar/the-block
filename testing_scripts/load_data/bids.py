@@ -21,6 +21,11 @@ CREATE TABLE bids (
 );
 """
 
+CREATE_INDEX_SQL = """
+CREATE INDEX bids_vehicle_bid_rank_user_idx
+    ON bids (vehicle_id, current_bid DESC, bid_placed_at DESC, user_id);
+"""
+
 
 INSERT_SQL = """
 INSERT INTO bids (
@@ -74,6 +79,7 @@ def main():
         cursor = connection.cursor()
         cursor.execute("DROP TABLE IF EXISTS bids;")
         cursor.execute(CREATE_TABLE_SQL)
+        cursor.execute(CREATE_INDEX_SQL)
         cursor.executemany(INSERT_SQL, bids)
         connection.commit()
 

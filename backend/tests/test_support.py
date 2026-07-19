@@ -30,6 +30,8 @@ CREATE TABLE bids (
     current_bid REAL NOT NULL,
     bid_placed_at TEXT NOT NULL
 );
+CREATE INDEX bids_vehicle_bid_rank_user_idx
+    ON bids (vehicle_id, current_bid DESC, bid_placed_at DESC, user_id);
 CREATE TABLE vehicles (
     id TEXT PRIMARY KEY,
     vin TEXT NOT NULL UNIQUE,

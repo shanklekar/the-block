@@ -34,8 +34,8 @@ class MainHelperTests(BackendDatabaseTestCase):
             )
         )
 
-        self.assertIn("LOWER(make) LIKE LOWER(?)", clause)
-        self.assertIn("SELECT bids.current_bid", clause)
+        self.assertIn("LOWER(vehicles.make) LIKE LOWER(?)", clause)
+        self.assertIn("bid_summary.current_bid >= ?", clause)
         self.assertEqual(parameters, ["%for%", 1200])
 
     def test_translate_criteria_to_stored_timeline_shifts_datetime_filters_backwards(self) -> None:
@@ -200,7 +200,29 @@ class ApiEndpointTests(BackendApiTestCase):
         self.assertTrue(payload["is_purchased"])
         self.assertTrue(payload["is_purchased_by_user"])
         self.assertTrue(payload["is_high_bidder"])
+        self.assertEqual(payload["current_bid"], 3500.0)
         self.assertEqual(payload["bid_count"], 1)
+
+    def test_vehicle_search_uses_joined_bid_summary_fields(self) -> None:
+        response = self.client.post(
+            "/api/vehicles/search",
+            json={
+                "user_id": 2,
+                "criteria": {
+                    "rules": [
+                        {"field": "current_bid", "operator": "gte", "value": 1200},
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["vehicles"][0]["id"], "veh-started")
+        self.assertEqual(payload["vehicles"][0]["current_bid"], 1200.0)
+        self.assertEqual(payload["vehicles"][0]["bid_count"], 1)
+        self.assertTrue(payload["vehicles"][0]["is_high_bidder"])
 
     def test_mutate_watching_is_idempotent_for_add_and_remove(self) -> None:
         add_response = self.client.post(

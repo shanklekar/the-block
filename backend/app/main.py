@@ -189,6 +189,8 @@ PURCHASED_SEARCH_COLUMNS = [
     "vehicles.condition_report",
 ]
 
+LIVE_BID_FIELDS = {"current_bid", "bid_count", "bid_amount"}
+
 
 def _shift_datetime_filter_value(value: Any, offset: timedelta) -> Any:
     if isinstance(value, str):
@@ -215,63 +217,100 @@ def _qualify_sql_column(column: str, *, prefix: str = "") -> str:
     return f"{prefix}{column}"
 
 
-def _build_bid_count_subquery(vehicle_id_reference: str) -> str:
+def _build_ranked_bids_subquery(where_clause: str = "") -> str:
     return f"""
-        SELECT COUNT(*)
+        SELECT
+            bids.vehicle_id,
+            bids.user_id,
+            bids.current_bid,
+            COUNT(*) OVER (PARTITION BY bids.vehicle_id) AS bid_count,
+            ROW_NUMBER() OVER (
+                PARTITION BY bids.vehicle_id
+                ORDER BY bids.current_bid DESC, bids.bid_placed_at DESC, bids.rowid DESC
+            ) AS bid_rank
         FROM bids
-        WHERE bids.vehicle_id = {vehicle_id_reference}
+        {where_clause}
     """
 
 
-def _build_top_bid_value_subquery(vehicle_id_reference: str, column: str) -> str:
+def _build_bid_summary_subquery(where_clause: str = "") -> str:
     return f"""
-        SELECT bids.{column}
-        FROM bids
-        WHERE bids.vehicle_id = {vehicle_id_reference}
-        ORDER BY bids.current_bid DESC, bids.bid_placed_at DESC, bids.rowid DESC
-        LIMIT 1
+        SELECT
+            ranked_bids.vehicle_id,
+            ranked_bids.current_bid,
+            ranked_bids.bid_count,
+            ranked_bids.user_id AS high_bidder_user_id
+        FROM (
+            {_build_ranked_bids_subquery(where_clause)}
+        ) AS ranked_bids
+        WHERE ranked_bids.bid_rank = 1
     """
 
 
-def _build_current_bid_subquery(vehicle_id_reference: str) -> str:
-    return _build_top_bid_value_subquery(vehicle_id_reference, "current_bid")
-
-
-def _build_current_high_bidder_user_id_subquery(vehicle_id_reference: str) -> str:
-    return _build_top_bid_value_subquery(vehicle_id_reference, "user_id")
-
-
-def _build_live_bid_select(*, prefix: str = "") -> str:
-    vehicle_id_reference = _qualify_sql_column("id", prefix=prefix)
+def _build_bid_summary_join() -> str:
     return f"""
-        ({_build_current_bid_subquery(vehicle_id_reference)}) AS live_current_bid,
-        ({_build_bid_count_subquery(vehicle_id_reference)}) AS live_bid_count
+        LEFT JOIN (
+            {_build_bid_summary_subquery()}
+        ) AS bid_summary
+            ON bid_summary.vehicle_id = vehicles.id
     """
 
 
-def _get_sql_field_expression(field: str, *, prefix: str = "") -> str:
-    vehicle_id_reference = _qualify_sql_column("id", prefix=prefix)
+def _build_single_vehicle_bid_summary_join() -> str:
+    return f"""
+        LEFT JOIN (
+            {_build_bid_summary_subquery("WHERE bids.vehicle_id = ?")}
+        ) AS bid_summary
+            ON bid_summary.vehicle_id = vehicles.id
+    """
 
+
+def _build_live_bid_select() -> str:
+    return f"""
+        bid_summary.current_bid AS live_current_bid,
+        COALESCE(bid_summary.bid_count, 0) AS live_bid_count
+    """
+
+
+def _get_sql_field_expression(
+    field: str,
+    *,
+    vehicle_prefix: str = "",
+    bid_summary_prefix: str = "",
+) -> str:
     if field == "current_bid":
-        return f"({_build_current_bid_subquery(vehicle_id_reference)})"
+        return _qualify_sql_column("current_bid", prefix=bid_summary_prefix)
 
     if field == "bid_count":
-        return f"({_build_bid_count_subquery(vehicle_id_reference)})"
+        return f"COALESCE({_qualify_sql_column('bid_count', prefix=bid_summary_prefix)}, 0)"
 
     if field == "bid_amount":
         return "COALESCE({}, {})".format(
-            _get_sql_field_expression("current_bid", prefix=prefix),
-            _qualify_sql_column("starting_bid", prefix=prefix),
+            _get_sql_field_expression(
+                "current_bid",
+                vehicle_prefix=vehicle_prefix,
+                bid_summary_prefix=bid_summary_prefix,
+            ),
+            _qualify_sql_column("starting_bid", prefix=vehicle_prefix),
         )
 
-    return _qualify_sql_column(field, prefix=prefix)
+    return _qualify_sql_column(field, prefix=vehicle_prefix)
 
 
-def _get_sort_sql_expression(sort_by: SortField, *, prefix: str = "") -> str:
+def _get_sort_sql_expression(
+    sort_by: SortField,
+    *,
+    vehicle_prefix: str = "",
+    bid_summary_prefix: str = "",
+) -> str:
     if sort_by == SortField.CURRENT_PRICE:
-        return _get_sql_field_expression("bid_amount", prefix=prefix)
+        return _get_sql_field_expression(
+            "bid_amount",
+            vehicle_prefix=vehicle_prefix,
+            bid_summary_prefix=bid_summary_prefix,
+        )
 
-    return _qualify_sql_column(SORT_SQL_COLUMNS[sort_by], prefix=prefix)
+    return _qualify_sql_column(SORT_SQL_COLUMNS[sort_by], prefix=vehicle_prefix)
 
 
 def _translate_criteria_to_stored_timeline(
@@ -292,8 +331,17 @@ def _translate_criteria_to_stored_timeline(
     return translated_criteria
 
 
-def _build_rule_clause(rule: FilterRule) -> tuple[str, list[Any]]:
-    column = _get_sql_field_expression(rule.field)
+def _build_rule_clause(
+    rule: FilterRule,
+    *,
+    vehicle_prefix: str = "",
+    bid_summary_prefix: str = "",
+) -> tuple[str, list[Any]]:
+    column = _get_sql_field_expression(
+        rule.field,
+        vehicle_prefix=vehicle_prefix,
+        bid_summary_prefix=bid_summary_prefix,
+    )
 
     if rule.operator == FilterOperator.IS_NULL:
         return f"{column} IS NULL", []
@@ -341,6 +389,14 @@ def _format_filter_option_label(field: str, value: str) -> str:
     return normalized_value
 
 
+def _field_uses_bid_summary(field: str) -> bool:
+    return field in LIVE_BID_FIELDS
+
+
+def _criteria_uses_bid_summary(criteria: FilterCriteria) -> bool:
+    return any(_field_uses_bid_summary(rule.field) for rule in criteria.rules)
+
+
 def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
     if not criteria.rules:
         return "", []
@@ -349,7 +405,11 @@ def build_where_clause(criteria: FilterCriteria) -> tuple[str, list[Any]]:
     parameters: list[Any] = []
 
     for rule in criteria.rules:
-        clause, values = _build_rule_clause(rule)
+        clause, values = _build_rule_clause(
+            rule,
+            vehicle_prefix="vehicles.",
+            bid_summary_prefix="bid_summary.",
+        )
         clauses.append(f"({clause})")
         parameters.extend(values)
 
@@ -363,7 +423,11 @@ def _build_option_search_clause(field: str, query: str) -> tuple[str, list[Any]]
     if not normalized_query:
         return "", []
 
-    column = _get_sql_field_expression(field)
+    column = _get_sql_field_expression(
+        field,
+        vehicle_prefix="vehicles.",
+        bid_summary_prefix="bid_summary.",
+    )
     return f"AND LOWER({column}) LIKE LOWER(?)", [f"%{normalized_query}%"]
 
 
@@ -373,7 +437,11 @@ def build_order_clause(
     *,
     group_purchased_last: bool = False,
 ) -> str:
-    sort_expression = _get_sort_sql_expression(sort_by)
+    sort_expression = _get_sort_sql_expression(
+        sort_by,
+        vehicle_prefix="vehicles.",
+        bid_summary_prefix="bid_summary.",
+    )
     direction = "ASC" if sort_direction == SortDirection.ASC else "DESC"
     order_fields: list[str] = []
 
@@ -445,9 +513,14 @@ def _search_filter_options(
             criteria_without_target,
             get_auction_start_offset(connection),
         )
+        include_bid_summary = _criteria_uses_bid_summary(translated_criteria)
         criteria_clause = build_where_clause(translated_criteria)
         where_clause, parameters = _combine_where_clauses(extra_clause or ("", []), criteria_clause)
-        option_column = _get_sql_field_expression(payload.field)
+        option_column = _get_sql_field_expression(
+            payload.field,
+            vehicle_prefix="vehicles.",
+            bid_summary_prefix="bid_summary.",
+        )
         option_search_clause, option_search_parameters = _build_option_search_clause(
             payload.field,
             payload.query,
@@ -456,6 +529,7 @@ def _search_filter_options(
         query = f"""
             SELECT DISTINCT {option_column} AS value
             FROM vehicles
+            {_build_bid_summary_join() if include_bid_summary else ""}
             {base_where_clause}
               AND {option_column} IS NOT NULL
               AND TRIM(CAST({option_column} AS TEXT)) != ''
@@ -582,19 +656,20 @@ def _get_vehicle_bidding_row(
             vehicles.id,
             vehicles.auction_start,
             vehicles.starting_bid,
-            ({_build_current_bid_subquery("vehicles.id")}) AS current_bid,
-            ({_build_bid_count_subquery("vehicles.id")}) AS bid_count,
-            ({_build_current_high_bidder_user_id_subquery("vehicles.id")}) AS high_bidder_user_id,
+            bid_summary.current_bid AS current_bid,
+            COALESCE(bid_summary.bid_count, 0) AS bid_count,
+            bid_summary.high_bidder_user_id AS high_bidder_user_id,
             EXISTS (
                 SELECT 1
                 FROM purchased
                 WHERE purchased.vehicle_id = vehicles.id
             ) AS is_sold
         FROM vehicles
+        {_build_single_vehicle_bid_summary_join()}
         WHERE vehicles.id = ?
         LIMIT 1
         """,
-        [vehicle_id],
+        [vehicle_id, vehicle_id],
     ).fetchone()
 
 
@@ -711,11 +786,8 @@ def _build_is_high_bidder_select(user_id: int | None) -> tuple[str, list[Any]]:
         return "0 AS is_high_bidder", []
 
     return (
-        f"""
-        COALESCE(
-            ({_build_current_high_bidder_user_id_subquery("vehicles.id")}),
-            -1
-        ) = ? AS is_high_bidder
+        """
+        COALESCE(bid_summary.high_bidder_user_id, -1) = ? AS is_high_bidder
         """,
         [user_id],
     )
@@ -764,6 +836,7 @@ def _build_vehicle_search_response(
             payload.criteria,
             auction_start_offset,
         )
+        count_requires_bid_summary = _criteria_uses_bid_summary(translated_criteria)
         criteria_clause = build_where_clause(translated_criteria)
         where_clause, parameters = _combine_where_clauses(
             extra_clause or ("", []),
@@ -782,7 +855,7 @@ def _build_vehicle_search_response(
         high_bidder_select, high_bidder_parameters = _build_is_high_bidder_select(
             payload.user_id
         )
-        live_bid_select = _build_live_bid_select(prefix="vehicles.")
+        live_bid_select = _build_live_bid_select()
         query = f"""
             SELECT
                 vehicles.*,
@@ -792,6 +865,7 @@ def _build_vehicle_search_response(
                 {purchased_by_user_select},
                 {high_bidder_select}
             FROM vehicles
+            {_build_bid_summary_join()}
             {where_clause}
             {order_clause}
             LIMIT ?
@@ -800,6 +874,7 @@ def _build_vehicle_search_response(
         count_query = f"""
             SELECT COUNT(*) AS total
             FROM vehicles
+            {_build_bid_summary_join() if count_requires_bid_summary else ""}
             {where_clause}
         """
         total_row = connection.execute(count_query, parameters).fetchone()
@@ -853,7 +928,7 @@ def _build_purchased_vehicle_search_response(
             payload.sort_by,
             payload.sort_direction,
         )
-        live_bid_select = _build_live_bid_select(prefix="vehicles.")
+        live_bid_select = _build_live_bid_select()
         query = f"""
             SELECT
                 vehicles.*,
@@ -863,6 +938,7 @@ def _build_purchased_vehicle_search_response(
             FROM purchased
             INNER JOIN vehicles
                 ON vehicles.id = purchased.vehicle_id
+            {_build_bid_summary_join()}
             {where_clause}
             {order_clause}
             LIMIT ?
@@ -873,6 +949,7 @@ def _build_purchased_vehicle_search_response(
             FROM purchased
             INNER JOIN vehicles
                 ON vehicles.id = purchased.vehicle_id
+            {_build_bid_summary_join()}
             {where_clause}
         """
         total_row = connection.execute(count_query, parameters).fetchone()
@@ -1090,24 +1167,41 @@ def get_filter_metadata() -> VehicleFilterMetadataResponse:
 
         for field in FILTER_METADATA_FIELDS["categorical"]:
             query = f"""
-                SELECT DISTINCT {field}
+                SELECT DISTINCT vehicles.{field}
                 FROM vehicles
-                WHERE {field} IS NOT NULL AND TRIM(CAST({field} AS TEXT)) != ''
-                ORDER BY {field} ASC
+                WHERE vehicles.{field} IS NOT NULL
+                  AND TRIM(CAST(vehicles.{field} AS TEXT)) != ''
+                ORDER BY vehicles.{field} ASC
             """
             rows = connection.execute(query).fetchall()
             categorical[field] = [str(row[0]) for row in rows]
 
         for field in FILTER_METADATA_FIELDS["numeric"]:
-            numeric_expression = _get_sql_field_expression(field)
+            include_bid_summary = _field_uses_bid_summary(field)
+            numeric_expression = _get_sql_field_expression(
+                field,
+                vehicle_prefix="vehicles.",
+                bid_summary_prefix="bid_summary." if include_bid_summary else "",
+            )
             row = connection.execute(
-                f"SELECT MIN({numeric_expression}) AS minimum, MAX({numeric_expression}) AS maximum FROM vehicles"
+                f"""
+                SELECT
+                    MIN({numeric_expression}) AS minimum,
+                    MAX({numeric_expression}) AS maximum
+                FROM vehicles
+                {_build_bid_summary_join() if include_bid_summary else ""}
+                """
             ).fetchone()
             numeric[field] = NumericMetadata(min=row["minimum"], max=row["maximum"])
 
         for field in FILTER_METADATA_FIELDS["datetime"]:
             row = connection.execute(
-                f"SELECT MIN({field}) AS minimum, MAX({field}) AS maximum FROM vehicles"
+                f"""
+                SELECT
+                    MIN(vehicles.{field}) AS minimum,
+                    MAX(vehicles.{field}) AS maximum
+                FROM vehicles
+                """
             ).fetchone()
             datetime[field] = DatetimeMetadata(
                 min=shift_auction_start(row["minimum"], auction_start_offset),
@@ -1533,12 +1627,17 @@ def get_vehicle(
         _build_is_purchased_by_user_select(user_id)
     )
     high_bidder_select, high_bidder_parameters = _build_is_high_bidder_select(user_id)
-    live_bid_select = _build_live_bid_select(prefix="vehicles.")
+    live_bid_select = _build_live_bid_select()
     select_clause = (
         "vehicles.*, "
         f"{live_bid_select}, 0 AS is_watched, {purchase_select}, {purchased_by_user_select}, {high_bidder_select}"
     )
-    query_parameters: list[Any] = [vehicle_id]
+    query_parameters: list[Any] = [
+        *purchased_by_user_parameters,
+        *high_bidder_parameters,
+        vehicle_id,
+        vehicle_id,
+    ]
 
     if user_id is not None:
         select_clause = f"""
@@ -1559,15 +1658,16 @@ def get_vehicle(
             *purchased_by_user_parameters,
             *high_bidder_parameters,
             vehicle_id,
-        ]
-    else:
-        query_parameters = [
-            *purchased_by_user_parameters,
-            *high_bidder_parameters,
             vehicle_id,
         ]
 
-    query = f"SELECT {select_clause} FROM vehicles WHERE id = ? LIMIT 1"
+    query = f"""
+        SELECT {select_clause}
+        FROM vehicles
+        {_build_single_vehicle_bid_summary_join()}
+        WHERE vehicles.id = ?
+        LIMIT 1
+    """
 
     with get_connection() as connection:
         if user_id is not None and not _user_exists(connection, user_id):

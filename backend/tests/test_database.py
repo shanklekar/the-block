@@ -68,6 +68,15 @@ class DatabaseUtilitiesTests(BackendDatabaseTestCase):
         self.assertEqual(serialized["images"], ["https://example.com/started-1.jpg"])
         self.assertEqual(serialized["auction_start"], "2024-01-02T00:00:00")
 
+    def test_bids_table_has_composite_lookup_index(self) -> None:
+        with self.connect() as connection:
+            rows = connection.execute("PRAGMA index_list('bids')").fetchall()
+
+        self.assertEqual(
+            [row["name"] for row in rows],
+            ["bids_vehicle_bid_rank_user_idx"],
+        )
+
     def test_watching_table_enforces_unique_user_vehicle_pairs(self) -> None:
         with self.connect() as connection:
             with self.assertRaises(sqlite3.IntegrityError):
