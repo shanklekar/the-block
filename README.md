@@ -111,7 +111,7 @@ The frontend talks to the backend at `http://127.0.0.1:8000` by default, so no e
 
 Roughly how much time you spent and how you approached the time box?
 
-I started work saturday morning and ended saturday evening.  Interruptions from kids and wife made it difficult to say how much time I actually spent.  I would write a prompt, let codex run with it, and then come back and test the output.  
+I started work saturday morning and ended saturday evening.  Interruptions from kids and wife made it difficult to say how much time I actually spent.  I would write a prompt, let codex run with it, and then come back and test the output.  Added some unit tests and cleanup while working on readme on sunday.
 
 Majority of time was spent thinking about how I wanted to phrase my prompts, physically typing them, and how I wanted to approach the bidding implementation.  Other than a little debugging around the bidding process and trying to get UI to look right the AI basically one shot everything.
 
@@ -254,6 +254,7 @@ The live smoke suite creates its own demo users, checks basic API health/search 
 
 What would you add, improve, or change?
 
+- The backend is not production ready at all, it was just built to support the front end, so there would need to be a lot of hardening done
 - I would polish the UI more
     - Use Openlane's official style guide and colors
     - Improve the filters
@@ -263,6 +264,7 @@ What would you add, improve, or change?
 - I would add authentication to demonstrate that
 - I would add an auction ending process to illustrate how that would work
 - I would have utilized docker and postgres
+    - The switch to postgress I would fix the data base connection 
 - I would have made the live bid component utilize the server time instead of local system time for when its displayed.  The backend will not let a user bid before the auction starts but the front end could if its in a different time configuration.
 - I would have added a smart search for the live search and watchlist where the user can type a general description of what they are looking for and it would filter the search results based on that
 - I would have added a news feed mode where vehicles we think the user would be most interested in are listed, based on their past search, bid, and buying history
