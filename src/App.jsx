@@ -13,9 +13,40 @@ const API_BASE_URL =
 const CURRENT_USER_ID = 1;
 const PURCHASE_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/purchased`;
 const WATCH_MUTATION_ENDPOINT = `${API_BASE_URL}/api/users/${CURRENT_USER_ID}/watching`;
+const SEARCH_VIEW = "search";
+const PURCHASED_VIEW = "purchased";
+const PURCHASED_VEHICLES_SEGMENT = "purchased_vehicles";
+const APP_BASE_PATH = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
+function normalizePathname(pathname = "/") {
+  if (!pathname) {
+    return "/";
+  }
+
+  const normalizedPathname = pathname.replace(/\/+$/, "");
+  return normalizedPathname || "/";
+}
+
+function buildViewPath(view) {
+  if (view === PURCHASED_VIEW) {
+    return normalizePathname(`${APP_BASE_PATH}/${PURCHASED_VEHICLES_SEGMENT}`);
+  }
+
+  return normalizePathname(APP_BASE_PATH || "/");
+}
+
+function readActiveViewFromUrl(location = window.location) {
+  const pathname = normalizePathname(location.pathname);
+
+  if (pathname === buildViewPath(PURCHASED_VIEW)) {
+    return PURCHASED_VIEW;
+  }
+
+  return SEARCH_VIEW;
+}
 
 export default function App() {
-  const [activeView, setActiveView] = useState("search");
+  const [activeView, setActiveView] = useState(() => readActiveViewFromUrl());
   const [filterSchema, setFilterSchema] = useState(null);
   const [filterMetadata, setFilterMetadata] = useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -38,6 +69,20 @@ export default function App() {
 
   const vehicleDetailsRequestRef = useRef(null);
 
+  function syncViewUrl(view, { replace = false } = {}) {
+    const url = new URL(window.location.href);
+    url.pathname = buildViewPath(view);
+    const nextPath = `${url.pathname}${url.search}${url.hash}`;
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+    if (nextPath === currentPath) {
+      return;
+    }
+
+    const method = replace ? "replaceState" : "pushState";
+    window.history[method](null, "", nextPath);
+  }
+
   function syncVehicleUrl(vehicleId = "", { replace = false } = {}) {
     const nextPath = buildVehicleHistoryPath(vehicleId);
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -48,6 +93,11 @@ export default function App() {
 
     const method = replace ? "replaceState" : "pushState";
     window.history[method](null, "", nextPath);
+  }
+
+  function openView(view, { replace = false } = {}) {
+    setActiveView(view);
+    syncViewUrl(view, { replace });
   }
 
   function resetVehicleDetailsState() {
@@ -142,6 +192,7 @@ export default function App() {
 
   useEffect(() => {
     function handlePopState() {
+      setActiveView(readActiveViewFromUrl());
       syncSelectedVehicleFromUrl();
     }
 
@@ -151,6 +202,10 @@ export default function App() {
       window.removeEventListener("popstate", handlePopState);
     };
   }, []);
+
+  useEffect(() => {
+    syncViewUrl(activeView, { replace: true });
+  }, [activeView]);
 
   useEffect(() => {
     if (!selectedVehicleId) {
@@ -553,18 +608,18 @@ export default function App() {
         </div>
         <nav className="inventory-view-nav" aria-label="Primary">
           <button
-            aria-pressed={activeView === "search"}
-            className={`inventory-view-tab ${activeView === "search" ? "is-active" : ""}`}
+            aria-pressed={activeView === SEARCH_VIEW}
+            className={`inventory-view-tab ${activeView === SEARCH_VIEW ? "is-active" : ""}`}
             type="button"
-            onClick={() => setActiveView("search")}
+            onClick={() => openView(SEARCH_VIEW)}
           >
             Search and Buy
           </button>
           <button
-            aria-pressed={activeView === "purchased"}
-            className={`inventory-view-tab ${activeView === "purchased" ? "is-active" : ""}`}
+            aria-pressed={activeView === PURCHASED_VIEW}
+            className={`inventory-view-tab ${activeView === PURCHASED_VIEW ? "is-active" : ""}`}
             type="button"
-            onClick={() => setActiveView("purchased")}
+            onClick={() => openView(PURCHASED_VIEW)}
           >
             Purchased Vehicles
           </button>
@@ -588,7 +643,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {activeView === "search" ? (
+        {activeView === SEARCH_VIEW ? (
           <>
             <InventorySection
               apiBaseUrl={API_BASE_URL}
