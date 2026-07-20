@@ -111,15 +111,15 @@ The frontend talks to the backend at `http://127.0.0.1:8000` by default, so no e
 
 Roughly how much time you spent and how you approached the time box?
 
-I started work saturday morning and ended saturday evening.  Interruptions from kids and wife made it difficult to say how much time I actually spent.  I would write a prompt, let codex run with it, and then come back and test the output.  Added some unit tests and cleanup while working on readme on sunday.
+I started work saturday morning and ended saturday evening.  Interruptions from kids and wife to help with things around the house made it difficult to say how much time I actually spent.  I would write a prompt, let codex run with it, and then come back and test the output.  Added some unit tests and cleanup while working on readme on sunday.
 
-Majority of time was spent thinking about how I wanted to phrase my prompts, physically typing them, and how I wanted to approach the bidding implementation.  Other than a little debugging around the bidding process and trying to get UI to look right the AI basically one shot everything.
+Majority of time was spent thinking about how I wanted to phrase my prompts, physically typing them, and how I wanted to approach the bidding implementation.  Other than a little debugging around the bidding process and some cosmetic tweaks the AI basically one shot everything.
 
-I gave myself a one day time box knowing I wasn't going to have dedicated time to work on it.  I wanted a complete working prototype to demo rather than something ugly, mocked up, and poorly implemented.  I have a hard time halfway doing things unless there is a real time restriction, in which case I identify the root issue to be solved and just tackle that directly.  
+I gave myself a one day time box knowing I wasn't going to have dedicated time to work on it.  I wanted a complete working prototype to demo rather than something ugly, mocked up, and poorly implemented.  I have a hard time halfway doing things unless there is a real time restriction, in which case I identify the root issue to be solved and just tackle that directly. This project was a bit open ended and I wanted to demonstrate some backend work and not just the UI. 
 
 And this kind of thing is just a lot of fun so I wanted to work on it.  You said I could spend more than 3-4 hours so I did.  I added some extra features that would not be considered mvp but really improves the experience.  
 
-If I was forced to abide by the 3-4 hour time box and minimum requirements I would have just built a mock up front end app, no backend or database at all, that just illustrated the concept of how the user could filter for vehicles, show their details, and place bids in memory (no way for anyone to bid against them).  It would not have included the watchlist concept, bidding would have been one vehicle at a time in the details modal, and there would have been no safety toggle for bidding.  The Live search UI (minus live bid component), filtering, and vehicle details would have looked pretty much the same.  If I was running good on time I would probably have tried to improve the look of the UI some, better colors, just extra polish.
+If I was forced to abide by the 3-4 hour time box and minimum requirements I would have just built a mock up front end app, no backend or database at all, that just illustrated the concept of how the user could filter for vehicles, show their details, and place bids in memory (no way for anyone to bid against them).  It would not have included the watchlist concept, bidding would have been one vehicle at a time in the details modal, and there would have been no safety toggle for bidding.  The Live search UI, filtering, and vehicle details would have looked pretty much the same.  If I was running good on time I would probably have tried to improve the look of the UI some, better colors, just extra polish.
 
 ## Assumptions and Scope
 
@@ -127,20 +127,24 @@ What you intentionally included, skipped, or simplified?
 
 Included
 - Everything described for the minimum bar
+- Backend to show some concepts with that
+- Unit tests
 
 Skipped
 - I did not build a dedicated mobile app but the web app is responsive and should be usable on a phone.
     - I chose this route because it covered all use cases, vs a dedicated mobile app would only cover mobile devices (if I went cross platform) or a single platform if I went native.
     - I also do not have mobile development environment setup and that would take a while to setup and testing would take much longer
-- Authentication - This was indicated as not being required so I started off not planning to implement it to save time and then forgot about it till the very end when I was wanting add multiple users for testing the bidding process.
+- Authentication - This was indicated as not being required so I started off not planning to implement it to save time and then forgot about it till the very end when I was wanting to add multiple users for testing the bidding process.
 
 Simplified
 - User accounts are just a name and an ID to differentiate bidders for demo purposes
 - Only built in the scope of individual users, nothing around dealerships with multiple users that you don't want to be able to bid against each other.
-- There is no end to the auctions as there were no details provided as to whether they had set durations or if a live auctioneer would be dictating things like simulcast.  
+- There is no end to the auctions as there were no details provided as to whether they had set durations or if a live auctioneer would be dictating things  
     - I thought about just saying that every auction would last x number of minutes, but I wanted to be able to demo several features that would have been hard to time around this. 
         - Could have added config to manipulate time for the app but I had already spent enough time on it
-
+- Backend robustness
+    - I implemented a process that is simple and works for a small number of users and vehicles but would need a lot of work and consideration to scale. 
+- Due to time constraints I was not able to put significant thought and research into tech stack and design like I would have preferred.  I largely made judgements based on what I already knew.
 
 ## Stack
 
@@ -164,7 +168,7 @@ Uvicorn
 - Fast and easy to setup and use, perfect for prototyping/demo
 
 For production, I would look at a .NET backend
-- Compiled for speed
+- Compiled (mostly) for execution speed
 - Lots of local devs in corporate space have experience with it
 - Lots of support and example code for AI to be trained on
 - Its what we use internally
@@ -204,7 +208,7 @@ The purchased vehicles page just shows a list of the vehicles that were purchase
 
 There is also a user profile view, but all its used for it adding test users and switching between them.  This was used to test the live bidding process.
 
-The backend database is treated as the source of truth and the api is built to handle sql and javascript injection.  It sanitizes the user provided input before adding to database.
+The backend database is treated as the source of truth and the api is built to handle sql and javascript injection.  It sanitizes the user provided input before adding to database.  Its not built for production level scaling though, just mostly a mock to support the frontend while illustrating a few concepts.
 
 ## Notable Decisions
 
@@ -212,7 +216,11 @@ What choices did you make and why? What tradeoffs did you consider?
 
 To minimize the number of websocket connections, only vehicles being watched or being looked at in detail view make a live bidding connection. I chose websockets over http requests because they allow much less latency and are better suited for real time feeds.
 
-I described why I chose the stack above, and my UI decisions in the what I built section.
+I initially chose to have the server handle filtering so it could reference the live bid amount and include that as a filtering option, but that is adding a lot of extra load to the server that should be offloaded to the client, especially with the possibility of very complex and extensive filters.
+
+I decided to cut off my work time towards making this perfect since its just a demo.  There is a lot more I wanted to improve and illustrate on the backend.
+
+I described why I chose the stack and my UI decisions in above sections.
 
 ## Testing
 
@@ -222,9 +230,9 @@ For UI work I like to see it, play with it, and iterate on it.  This means the c
 
 For this build I did manual testing as I worked through it, then wrote some key unit tests after everything was working to try and catch any bugs introduced with future changes.  This included a live api testing script to test competitive bidding scenarios.  I focused on the unit testing and api testing on the bidding process as this is the real core of the app and the main component that bugs can't be tolerated with.
 
-For code review, I asked the AI what is wrong with the code, do you see sql or code injection vulnerabilities, what inefficiencies or other issues do you see.  It found some good stuff that I fixed and some stuff that was not important for this demo.
+For code review, I asked the AI what is wrong with the code, do you see sql or code injection vulnerabilities, what inefficiencies or other issues do you see.  It found some good stuff that should be addressed but was not important for this demo.
 
-For manual testing, I clicked through the different UI components, trying them in every combination and on every view they are displayed.  I tested each filter to make sure it was filtering the results as expected, same with sorting.  I purchased vehicles with buy it now and made sure they went to purchases page with correct info.  I Loaded the ui in chrome and firefox to test different browsers and then bid against myself with both up side by side to make sure live bidding was working as expected.  I ran the front end with backend not running to make sure it handled no data like I expected.
+For manual testing, I clicked through the different UI components, trying them in every combination and on every view they are displayed.  I tested each filter to make sure it was filtering the results as expected, same with sorting.  I purchased vehicles with buy it now and made sure they went to purchases page with correct info.  I Loaded the ui in chrome and firefox to test different browsers and then bid against myself with both up side by side to make sure live bidding was working as expected.  I ran the front end with backend not running to make sure it handled no data like I expected.  I resized the browser window to test responsiveness on different views to simulate mobile experience.
 
 Automated backend tests:
 
@@ -254,27 +262,27 @@ The live smoke suite creates its own demo users, checks basic API health/search 
 
 What would you add, improve, or change?
 
-- The backend is not production ready at all, it was just built to support the front end, so there would need to be a lot of hardening done
+- The backend is not production ready at all, it was just built to support the front end for the demo and illustrate a few concepts, so there would need to be a lot of hardening done
+- The current system could run into memory issues with complex filters (should move these to front end to offload server load)
+- The bid endpoint, purchase endpoint, websocket connect path, and broadcast path all run synchronous DB calls inline instead of offloading them to a threadpool or using an async drive
+- Fix the refresh flicker when the user bids on a vehicle (only update the component that changed)
+- I would have made the live bid component utilize the server time instead of local system time for when its displayed.  The backend will not let a user bid before the auction starts but the front end could if its in a different time configuration
+- I would have added a smart search for the live search and watchlist where the user can type a general description of what they are looking for and it would filter the search results based on that
+- I would add authentication to demonstrate that
+- I would add an auction ending process to illustrate how that would work
+- I would have utilized docker and postgres
+
+
+### Features that would be useful but not useful for demo
 - I would polish the UI more
     - Use Openlane's official style guide and colors
     - Improve the filters
     - Improve UI when shrunk to mobile size, some of the buttons end up in awkward places
     - Reduce white space or offer a "condensed" mode so users can see more info at a time
-    - Add a dark mode to reduce eye strain at night or in heavy use
-- I would add authentication to demonstrate that
-- I would add an auction ending process to illustrate how that would work
-- I would have utilized docker and postgres
-    - The switch to postgress I would fix the data base connection 
-- I would have made the live bid component utilize the server time instead of local system time for when its displayed.  The backend will not let a user bid before the auction starts but the front end could if its in a different time configuration.
-- I would have added a smart search for the live search and watchlist where the user can type a general description of what they are looking for and it would filter the search results based on that
+- Ability to hide vehicles I have no interest in from search results
 - I would have added a news feed mode where vehicles we think the user would be most interested in are listed, based on their past search, bid, and buying history
 - I would add prebid option so users can place an automated bid before the auction starts
 - I would have added a bid history component to show the live bids on the vehicle
-- Ability to hide vehicles I have no interest in from search results
-- Ability to hide and rearrange information on the components (have dynamic components the user can customize)
-- Fix the refresh flicker when the user bids on a vehicle (only update the components that changed)
-- Allow user to customize the grid size in search results (see more cars on screen at a time or see larger pictures and fonts)
-- I would add more unit tests, automated api tests, and automated gui tests (selenium/puppeteer)
-- I would generate scripts to stress test the bidding process and see what it can handle
-- I would have tested more
-- I would fix the 
+
+
+
