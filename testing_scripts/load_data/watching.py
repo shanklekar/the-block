@@ -24,7 +24,7 @@ def main():
     with sqlite3.connect(DATABASE_PATH) as connection:
         cursor = connection.cursor()
         cursor.execute("DROP TABLE IF EXISTS watching;")
-        cursor.execute(CREATE_TABLE_SQL)
+        cursor.executescript(CREATE_TABLE_SQL)
         connection.commit()
 
         watching_count = cursor.execute("SELECT COUNT(*) FROM watching;").fetchone()[0]
